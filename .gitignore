@@ -1,0 +1,20 @@
+# node_modules folder (dependencies)
+node_modules/
+
+# dist
+dist/
+
+# log files
+*.log
+npm-debug.log*
+
+# dotenv environment variables
+.env
+
+# build output
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db

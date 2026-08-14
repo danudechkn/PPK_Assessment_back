@@ -7,16 +7,16 @@ import {
 } from "sequelize";
 import { sequelize } from "./index";
 
-class Competencies extends Model<
-    InferAttributes<Competencies>,
-    InferCreationAttributes<Competencies>
+class Evaluations extends Model<
+    InferAttributes<Evaluations>,
+    InferCreationAttributes<Evaluations>
 > {
     declare id: CreationOptional<number>;
-    declare category_id: number;
-    declare department_id: CreationOptional<number | null>;
-    declare code: string;
-    declare name: string;
-    declare description: CreationOptional<string | null>;
+    declare fiscal_year: number;
+    declare template_id: number;
+    declare evaluatee_id: number;
+    declare status: CreationOptional<string | null>;
+    declare final_score: CreationOptional<number | null>;
     declare created_at: CreationOptional<Date>;
     declare updated_at: CreationOptional<Date>;
 
@@ -25,7 +25,7 @@ class Competencies extends Model<
 }
 
 
-Competencies.init(
+Evaluations.init(
     {
         id: {
             type: DataTypes.BIGINT,
@@ -33,25 +33,25 @@ Competencies.init(
             primaryKey: true,
             allowNull: false,
         },
-        category_id: {
+        fiscal_year: {
+            type: DataTypes.INTEGER,
+            allowNull: false,
+        },
+        template_id: {
             type: DataTypes.BIGINT,
             allowNull: false,
         },
-        department_id: {
+        evaluatee_id: {
             type: DataTypes.BIGINT,
-            allowNull: true,
+            allowNull: false,
         },
-        code: {
+        status: {
             type: DataTypes.STRING(50),
-            allowNull: false,
-            unique: true,
+            allowNull: true,
+            defaultValue: "DRAFT",
         },
-        name: {
-            type: DataTypes.STRING(255),
-            allowNull: false,
-        },
-        description: {
-            type: DataTypes.TEXT,
+        final_score: {
+            type: DataTypes.DECIMAL(5, 2),
             allowNull: true,
         },
         created_at: {
@@ -65,11 +65,11 @@ Competencies.init(
     },
     {
         sequelize,
-        tableName: "competencies",
+        tableName: "evaluations",
         timestamps: true,
         createdAt: "created_at",
         updatedAt: "updated_at",
     }
 );
 
-export default Competencies;
+export default Evaluations;

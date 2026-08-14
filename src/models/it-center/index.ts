@@ -71,6 +71,7 @@ Object.keys(db).forEach((modelName) => {
   }
 });
 
+db.evaluation_templates
 // 5. ส่งออกระบบไปใช้ร่วมกัน
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;

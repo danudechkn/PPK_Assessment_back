@@ -12,7 +12,7 @@ export async function up(queryInterface: QueryInterface): Promise<void> {
             type: DataTypes.BIGINT,
             allowNull: false,
             references: {
-                model: "evaluation_sections",
+                model: "template_sections",
                 key: "id",
             },
             onDelete: "CASCADE",

@@ -71,25 +71,103 @@ Object.keys(db).forEach((modelName) => {
   }
 });
 
-db.evaluation_templates.hasMany(db.evaluation_steps, {
-  foreignKey: "evaluation_id",
-  as: "evaluation_steps"
-});
+// ความสัมพันธ์ทั้งหมด (hasMany & belongsTo)
 
-db.evaluation_types.hasMany(db.evaluation_templates, {
-  foreignKey: "evaluation_type_id",
-  as: "evaluation_templates"
-});
+// 1. EmployeeTypes <-> EvaluationTemplates, Users
+if (db.EmployeeTypes) {
+  if (db.EvaluationTemplates) {
+    db.EmployeeTypes.hasMany(db.EvaluationTemplates, { foreignKey: "employee_type_id", as: "evaluation_templates" });
+    db.EvaluationTemplates.belongsTo(db.EmployeeTypes, { foreignKey: "employee_type_id", as: "employee_type" });
+  }
+  if (db.Users) {
+    db.EmployeeTypes.hasMany(db.Users, { foreignKey: "employee_type_id", as: "users" });
+    db.Users.belongsTo(db.EmployeeTypes, { foreignKey: "employee_type_id", as: "employee_type" });
+  }
+}
 
-db.evaluation_steps.belongsTo(db.evaluation_templates, {
-  foreignKey: "evaluation_id",
-  as: "evaluation_templates"
-});
+// 2. Department <-> Users, Competencies
+if (db.Department) {
+  if (db.Users) {
+    db.Department.hasMany(db.Users, { foreignKey: "department_id", as: "users" });
+    db.Users.belongsTo(db.Department, { foreignKey: "department_id", as: "department" });
+  }
+  if (db.Competencies) {
+    db.Department.hasMany(db.Competencies, { foreignKey: "department_id", as: "competencies" });
+    db.Competencies.belongsTo(db.Department, { foreignKey: "department_id", as: "department" });
+  }
+}
 
-db.evaluation_templates.belongsTo(db.evaluation_types, {
-  foreignKey: "evaluation_type_id",
-  as: "evaluation_types"
-});
+// 3. CompetencyCategories <-> Competencies
+if (db.CompetencyCategories && db.Competencies) {
+  db.CompetencyCategories.hasMany(db.Competencies, { foreignKey: "category_id", as: "competencies" });
+  db.Competencies.belongsTo(db.CompetencyCategories, { foreignKey: "category_id", as: "category" });
+}
+
+// 4. Competencies <-> CompetencyLevels, TemplateItems
+if (db.Competencies) {
+  if (db.CompetencyLevels) {
+    db.Competencies.hasMany(db.CompetencyLevels, { foreignKey: "competency_id", as: "competency_levels" });
+    db.CompetencyLevels.belongsTo(db.Competencies, { foreignKey: "competency_id", as: "competency" });
+  }
+  if (db.TemplateItems) {
+    db.Competencies.hasMany(db.TemplateItems, { foreignKey: "competency_id", as: "template_items" });
+    db.TemplateItems.belongsTo(db.Competencies, { foreignKey: "competency_id", as: "competency" });
+  }
+}
+
+// 5. EvaluationTemplates <-> TemplateSections, Evaluations
+if (db.EvaluationTemplates) {
+  if (db.TemplateSections) {
+    db.EvaluationTemplates.hasMany(db.TemplateSections, { foreignKey: "template_id", as: "template_sections" });
+    db.TemplateSections.belongsTo(db.EvaluationTemplates, { foreignKey: "template_id", as: "evaluation_template" });
+  }
+  if (db.Evaluations) {
+    db.EvaluationTemplates.hasMany(db.Evaluations, { foreignKey: "template_id", as: "evaluations" });
+    db.Evaluations.belongsTo(db.EvaluationTemplates, { foreignKey: "template_id", as: "evaluation_template" });
+  }
+}
+
+// 6. TemplateSections <-> TemplateItems
+if (db.TemplateSections && db.TemplateItems) {
+  db.TemplateSections.hasMany(db.TemplateItems, { foreignKey: "section_id", as: "template_items" });
+  db.TemplateItems.belongsTo(db.TemplateSections, { foreignKey: "section_id", as: "template_section" });
+}
+
+// 7. Users <-> Evaluations, EvaluationSteps
+if (db.Users) {
+  if (db.Evaluations) {
+    db.Users.hasMany(db.Evaluations, { foreignKey: "evaluatee_id", as: "evaluations" });
+    db.Evaluations.belongsTo(db.Users, { foreignKey: "evaluatee_id", as: "evaluatee" });
+  }
+  if (db.EvaluationSteps) {
+    db.Users.hasMany(db.EvaluationSteps, { foreignKey: "evaluator_id", as: "evaluation_steps" });
+    db.EvaluationSteps.belongsTo(db.Users, { foreignKey: "evaluator_id", as: "evaluator" });
+  }
+}
+
+// 8. Evaluations <-> EvaluationSteps, EvaluationResponses
+if (db.Evaluations) {
+  if (db.EvaluationSteps) {
+    db.Evaluations.hasMany(db.EvaluationSteps, { foreignKey: "evaluation_id", as: "evaluation_steps" });
+    db.EvaluationSteps.belongsTo(db.Evaluations, { foreignKey: "evaluation_id", as: "evaluation" });
+  }
+  if (db.EvaluationResponses) {
+    db.Evaluations.hasMany(db.EvaluationResponses, { foreignKey: "evaluation_id", as: "evaluation_responses" });
+    db.EvaluationResponses.belongsTo(db.Evaluations, { foreignKey: "evaluation_id", as: "evaluation" });
+  }
+}
+
+// 9. EvaluationSteps <-> EvaluationResponses
+if (db.EvaluationSteps && db.EvaluationResponses) {
+  db.EvaluationSteps.hasMany(db.EvaluationResponses, { foreignKey: "evaluation_step_id", as: "evaluation_responses" });
+  db.EvaluationResponses.belongsTo(db.EvaluationSteps, { foreignKey: "evaluation_step_id", as: "evaluation_step" });
+}
+
+// 10. TemplateItems <-> EvaluationResponses
+if (db.TemplateItems && db.EvaluationResponses) {
+  db.TemplateItems.hasMany(db.EvaluationResponses, { foreignKey: "template_item_id", as: "evaluation_responses" });
+  db.EvaluationResponses.belongsTo(db.TemplateItems, { foreignKey: "template_item_id", as: "template_item" });
+}
 
 // 5. ส่งออกระบบไปใช้ร่วมกัน
 db.sequelize = sequelize;

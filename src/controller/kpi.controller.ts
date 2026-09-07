@@ -1,82 +1,181 @@
-import { respond } from "../utils/api-response.util";
 import { Request, Response } from "express";
 import KpiService from "../service/kpi.service";
 
 class KpiController {
-  private static respond = respond;
-
-  static getIndicators(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.getIndicators());
+  static async getIndicators(req: Request, res: Response) {
+    try {
+      const result = await KpiService.getIndicators();
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 
-  static getIndicatorById(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.getIndicatorById(Number(req.params.id)));
+  static async getIndicatorById(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      const result = await KpiService.getIndicatorById(id);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 
   static async createIndicator(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.createIndicator(req.body), 201);
+    try {
+      const result = await KpiService.createIndicator(req.body);
+      res.status(201).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 
-  static createScoreLevels(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.createScoreLevels(req.body), 201);
+  static async createScoreLevels(req: Request, res: Response) {
+    try {
+      const result = await KpiService.createScoreLevels(req.body);
+      res.status(201).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 
-  static createAssessmentValues(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.createAssessmentValues(req.body), 201);
+  static async createAssessmentValues(req: Request, res: Response) {
+    try {
+      const result = await KpiService.createAssessmentValues(req.body);
+      res.status(201).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 
-  static getAssessmentValues(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.getAssessmentValues(req.query));
+  static async getAssessmentValues(req: Request, res: Response) {
+    try {
+      const result = await KpiService.getAssessmentValues(req.query);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 
-  static getUserAssessmentValues(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.getAssessmentValues(
-      { ...req.query, value_order_id: req.params.orderId }, true,
-    ));
+  static async getUserAssessmentValues(req: Request, res: Response) {
+    try {
+      const result = await KpiService.getAssessmentValues(
+        { ...req.query, value_order_id: req.params.orderId },
+        true
+      );
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 
-  static getAssessmentValueById(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.getAssessmentValueById(Number(req.params.id)));
+  static async getAssessmentValueById(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      const result = await KpiService.getAssessmentValueById(id);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 
-  static updateAssessmentValue(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.updateAssessmentValue(Number(req.params.id), req.body));
+  static async updateAssessmentValue(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      const result = await KpiService.updateAssessmentValue(id, req.body);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 
-  static updateAssessmentValueScores(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.updateAssessmentValueScores(Number(req.params.id), req.body));
+  static async updateAssessmentValueScores(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      const result = await KpiService.updateAssessmentValueScores(id, req.body);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 
-  static deleteAssessmentValue(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.deleteAssessmentValue(Number(req.params.id)));
+  static async deleteAssessmentValue(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      const result = await KpiService.deleteAssessmentValue(id);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 
-  static getScoreLevels(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.getScoreLevels());
+  static async getScoreLevels(req: Request, res: Response) {
+    try {
+      const result = await KpiService.getScoreLevels();
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 
-  static getScoreLevelById(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.getScoreLevelById(Number(req.params.id)));
+  static async getScoreLevelById(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      const result = await KpiService.getScoreLevelById(id);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 
-  static updateScoreLevel(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.updateScoreLevel(Number(req.params.id), req.body));
+  static async updateScoreLevel(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      const result = await KpiService.updateScoreLevel(id, req.body);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 
-  static deleteScoreLevel(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.deleteScoreLevel(Number(req.params.id)));
+  static async deleteScoreLevel(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      const result = await KpiService.deleteScoreLevel(id);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 
-  static updateIndicator(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.updateIndicator(Number(req.params.id), req.body));
+  static async updateIndicator(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      const result = await KpiService.updateIndicator(id, req.body);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 
-  static deleteIndicator(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.deleteIndicator(Number(req.params.id)));
+  static async deleteIndicator(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      const result = await KpiService.deleteIndicator(id);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 
-  static submitAssessmentValue(req: Request, res: Response) {
-    return KpiController.respond(res, () => KpiService.submitAssessmentValue(Number(req.params.id), req.body));
+  static async submitAssessmentValue(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      const result = await KpiService.submitAssessmentValue(id, req.body);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(error.status || 400).json({ success: false, message: error.message });
+    }
   }
 }
 

@@ -1,10 +1,8 @@
 import { Router } from "express";
 import KpiController from "../controller/kpi.controller";
 import AssessmentController from "../controller/assessmentcompetent.controller";
-import { validateUserBody } from "../middleware/user-request.middleware";
 
 const router = Router();
-router.use(validateUserBody);
 // const apiLogger = require("../middleware/apiLogger");
 // const {
 //   authenticateToken,

@@ -12,7 +12,8 @@
     "seed:make": "sequelize-cli seed:generate --name",
     "seed:run": "sequelize-cli db:seed:all",
     "seed:undo": "sequelize-cli db:seed:undo",
-    "seed:undo:all": "sequelize-cli db:seed:undo:all"
+    "seed:undo:all": "sequelize-cli db:seed:undo:all",
+    "test": "node --test tests/*.test.cjs"
   },
   "dependencies": {
     "@types/cors": "^2.8.19",

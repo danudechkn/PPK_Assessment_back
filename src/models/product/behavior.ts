@@ -7,29 +7,35 @@ import {
 } from "sequelize";
 import { sequelize } from "./index";
 
-class CompetencyCategories extends Model<
-    InferAttributes<CompetencyCategories>,
-    InferCreationAttributes<CompetencyCategories>
+class Behavior extends Model<
+    InferAttributes<Behavior>,
+    InferCreationAttributes<Behavior>
 > {
 
     declare id: CreationOptional<number>;
-    declare name: string | null;
+    declare competency_id: number | null;
+    declare description: string | null;
     declare status: string | null;
+
 
     static associate(models: any) {
         //
     }
 }
 
-CompetencyCategories.init(
+Behavior.init(
     {
         id: {
             type: DataTypes.BIGINT,
             autoIncrement: true,
             primaryKey: true,
         },
-        name: {
-            type: DataTypes.STRING(255),
+        competency_id: {
+            type: DataTypes.BIGINT,
+            allowNull: true,
+        },
+        description: {
+            type: DataTypes.TEXT,
             allowNull: true,
         },
         status: {
@@ -40,9 +46,9 @@ CompetencyCategories.init(
     },
     {
         sequelize,
-        tableName: "competency_categories",
+        tableName: "behavior",
         timestamps: false,
     },
 );
 
-export default CompetencyCategories;
+export default Behavior;

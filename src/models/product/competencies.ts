@@ -1,75 +1,74 @@
 import {
-    Model,
-    DataTypes,
-    InferAttributes,
-    InferCreationAttributes,
-    CreationOptional,
+  Model,
+  DataTypes,
+  InferAttributes,
+  InferCreationAttributes,
+  CreationOptional,
 } from "sequelize";
 import { sequelize } from "./index";
 
 class Competencies extends Model<
-    InferAttributes<Competencies>,
-    InferCreationAttributes<Competencies>
+  InferAttributes<Competencies>,
+  InferCreationAttributes<Competencies>
 > {
-    declare id: CreationOptional<number>;
-    declare category_id: number;
-    declare department_id: CreationOptional<number | null>;
-    declare code: string;
-    declare name: string;
-    declare description: CreationOptional<string | null>;
-    declare created_at: CreationOptional<Date>;
-    declare updated_at: CreationOptional<Date>;
 
-    static associate(models: any) {
-    }
+  declare id: CreationOptional<number>;
+  declare competency_category_id: number | null;
+  declare type_person_id: number | null;
+  declare func_unit_id: number | null;
+  declare position_level_id: number | null;
+  declare competency: string | null;
+  declare expected_score: number | null;
+  declare status: string | null;
+
+
+  static associate(models: any) {
+    //
+  }
 }
 
-
 Competencies.init(
-    {
-        id: {
-            type: DataTypes.BIGINT,
-            autoIncrement: true,
-            primaryKey: true,
-            allowNull: false,
-        },
-        category_id: {
-            type: DataTypes.BIGINT,
-            allowNull: false,
-        },
-        department_id: {
-            type: DataTypes.BIGINT,
-            allowNull: true,
-        },
-        code: {
-            type: DataTypes.STRING(50),
-            allowNull: false,
-            unique: true,
-        },
-        name: {
-            type: DataTypes.STRING(255),
-            allowNull: false,
-        },
-        description: {
-            type: DataTypes.TEXT,
-            allowNull: true,
-        },
-        created_at: {
-            type: DataTypes.DATE,
-            allowNull: true,
-        },
-        updated_at: {
-            type: DataTypes.DATE,
-            allowNull: true,
-        },
+  {
+    id: {
+      type: DataTypes.BIGINT,
+      autoIncrement: true,
+      primaryKey: true,
     },
-    {
-        sequelize,
-        tableName: "competencies",
-        timestamps: true,
-        createdAt: "created_at",
-        updatedAt: "updated_at",
-    }
+    competency_category_id: {
+      type: DataTypes.BIGINT,
+      allowNull: true,
+    },
+    type_person_id: {
+      type: DataTypes.BIGINT,
+      allowNull: true,
+    },
+    func_unit_id: {
+      type: DataTypes.BIGINT,
+      allowNull: true,
+    },
+    position_level_id: {
+      type: DataTypes.BIGINT,
+      allowNull: true,
+    },
+    competency: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    expected_score: {
+      type: DataTypes.TINYINT,
+      allowNull: true,
+    },
+    status: {
+      type: DataTypes.CHAR(1),
+      allowNull: true,
+      defaultValue: "Y",
+    },
+  },
+  {
+    sequelize,
+    tableName: "competencies",
+    timestamps: false,
+  },
 );
 
 export default Competencies;

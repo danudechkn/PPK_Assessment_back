@@ -3,6 +3,10 @@ import KpiController from "../controller/kpi.controller";
 import AssessmentController from "../controller/assessmentcompetent.controller";
 
 const router = Router();
+
+router.get("/competency-scores/:id", AssessmentController.getScoreById);
+router.get("/kpi-levels/:id", KpiController.getScoreLevelById);
+
 // const apiLogger = require("../middleware/apiLogger");
 // const {
 //   authenticateToken,

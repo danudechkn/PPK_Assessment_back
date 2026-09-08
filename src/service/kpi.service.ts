@@ -4,19 +4,25 @@ import { parseScore } from "../utils/score.util";
 import { Op, Transaction } from "sequelize";
 
 class KpiService {
-  static async getAssessmentValues(filter: Record<string, unknown>, groupByOrder = false) {
+  static async getAssessmentValues(filter: Record<string, unknown> = {}, groupByOrder = false) {
+    this.assertObject(filter, "Filter");
+    const where: Record<string, unknown> = {};
+    for (const field of ["value_order_id", "kpi_indicator_id"]) {
+      if (filter[field] !== undefined && filter[field] !== "") {
+        where[field] = this.parseId(filter[field], field);
+      }
+    }
+    if (filter.status !== undefined && filter.status !== "") {
+      if (filter.status !== "DRAFT" && filter.status !== "SUBMITTED") {
+        throw new ApiError("status must be DRAFT or SUBMITTED");
+      }
+      where.status = filter.status;
+    }
     let valueOrder;
     if (groupByOrder) {
-      const id = filter.value_order_id;
-      if (typeof id !== "string" || !/^\d+$/.test(id) || !Number.isSafeInteger(Number(id)) || Number(id) <= 0) {
-        throw new ApiError("value_order_id must be a positive integer");
-      }
-      valueOrder = await db.ValueOrders.findByPk(Number(id));
+      const id = this.parseId(filter.value_order_id, "value_order_id");
+      valueOrder = await db.ValueOrders.findByPk(id);
       if (!valueOrder) throw new ApiError("Value order not found", 404);
-    }
-    const where: Record<string, unknown> = {};
-    for (const field of ["value_order_id", "kpi_indicator_id", "status"]) {
-      if (filter[field] !== undefined && filter[field] !== "") where[field] = filter[field];
     }
     const values = await db.KpiAssessmentValues.findAll({
       where,
@@ -42,6 +48,7 @@ class KpiService {
   }
 
   static async createAssessmentValues(data: Record<string, unknown> | Record<string, unknown>[]) {
+    if (!Array.isArray(data)) this.assertObject(data, "Request body");
     const items = Array.isArray(data) ? data : data.dataArray;
     if (!Array.isArray(items) || items.length === 0) {
       throw new ApiError("dataArray must be a non-empty array");
@@ -91,6 +98,7 @@ class KpiService {
   }
 
   static async updateAssessmentValueScores(id: number, data: Record<string, unknown>) {
+    this.assertObject(data, "Assessment value");
     return db.sequelize.transaction(async (transaction: Transaction) => {
       const assessmentValue = await this.findAssessmentValue(id, transaction);
       if (assessmentValue.status === "SUBMITTED") {
@@ -148,6 +156,7 @@ class KpiService {
   }
 
   static async createScoreLevels(data: Record<string, unknown> | Record<string, unknown>[]) {
+    if (!Array.isArray(data)) this.assertObject(data, "Request body");
     const items = Array.isArray(data) ? data : data.dataArray;
     if (!Array.isArray(items) || items.length === 0) {
       throw new ApiError("dataArray must be a non-empty array");
@@ -213,6 +222,7 @@ class KpiService {
       return db.KpiIndicators.bulkCreate(data.map((item) => this.validateIndicator(item)));
     }
 
+    this.assertObject(data, "Request body");
     const items = data.dataArray;
 
     if (items !== undefined) {
@@ -241,6 +251,7 @@ class KpiService {
   }
 
   private static validateIndicator(data: Record<string, unknown>) {
+    this.assertObject(data, "KPI indicator");
     const name = typeof data.name === "string" ? data.name.trim() : "";
     if (!name || name.length > 255) throw new ApiError("name is required and must not exceed 255 characters");
 
@@ -265,6 +276,7 @@ class KpiService {
   }
 
   private static validateUpdate(data: Record<string, unknown>) {
+    this.assertObject(data, "KPI indicator");
     const payload: Record<string, unknown> = {};
     if (data.name !== undefined) {
       if (typeof data.name !== "string" || !data.name.trim() || data.name.trim().length > 255) throw new ApiError("name must be a non-empty string");
@@ -284,9 +296,8 @@ class KpiService {
   }
 
   private static validateScoreLevel(data: Record<string, unknown>) {
-    if (!Number.isInteger(Number(data.kpi_indicator_id)) || Number(data.kpi_indicator_id) <= 0) {
-      throw new ApiError("kpi_indicator_id is required and must be a positive integer");
-    }
+    this.assertObject(data, "KPI score level");
+    const kpiIndicatorId = this.parseId(data.kpi_indicator_id, "kpi_indicator_id");
     if (!this.isScore(data.score)) {
       throw new ApiError("score is required and must be an integer between 0 and 255");
     }
@@ -303,7 +314,7 @@ class KpiService {
     }
 
     return {
-      kpi_indicator_id: Number(data.kpi_indicator_id),
+      kpi_indicator_id: kpiIndicatorId,
       score: Number(data.score),
       criteria_text: data.criteria_text.trim(),
       operator_type: operatorType,
@@ -311,14 +322,10 @@ class KpiService {
   }
 
   private static validateAssessmentValue(data: Record<string, unknown>) {
-    if (!data || typeof data !== "object" || Array.isArray(data)) throw new ApiError("Assessment value must be an object");
+    this.assertObject(data, "Assessment value");
     if (data.weighted_score !== undefined) throw new ApiError("weighted_score is calculated automatically");
-    if (!Number.isInteger(Number(data.value_order_id)) || Number(data.value_order_id) <= 0) {
-      throw new ApiError("value_order_id is required and must be a positive integer");
-    }
-    if (!Number.isInteger(Number(data.kpi_indicator_id)) || Number(data.kpi_indicator_id) <= 0) {
-      throw new ApiError("kpi_indicator_id is required and must be a positive integer");
-    }
+    const valueOrderId = this.parseId(data.value_order_id, "value_order_id");
+    const kpiIndicatorId = this.parseId(data.kpi_indicator_id, "kpi_indicator_id");
     if (!this.isNumber(data.weight)) {
       throw new ApiError("weight is required and must be a number");
     }
@@ -326,8 +333,8 @@ class KpiService {
     if (weight < 0 || weight > 999.99) throw new ApiError("weight must be between 0 and 999.99");
 
     const payload: Record<string, unknown> = {
-      value_order_id: Number(data.value_order_id),
-      kpi_indicator_id: Number(data.kpi_indicator_id),
+      value_order_id: valueOrderId,
+      kpi_indicator_id: kpiIndicatorId,
       weight,
     };
     for (const field of ["actual_value"]) {
@@ -354,15 +361,12 @@ class KpiService {
   }
 
   private static validateAssessmentValueUpdate(data: Record<string, unknown>) {
-    if (!data || typeof data !== "object" || Array.isArray(data)) throw new ApiError("Assessment value must be an object");
+    this.assertObject(data, "Assessment value");
     if (data.weighted_score !== undefined) throw new ApiError("weighted_score is calculated automatically");
     const payload: Record<string, unknown> = {};
     for (const field of ["value_order_id", "kpi_indicator_id"]) {
       if (data[field] !== undefined) {
-        if (!Number.isInteger(Number(data[field])) || Number(data[field]) <= 0) {
-          throw new ApiError(`${field} must be a positive integer`);
-        }
-        payload[field] = Number(data[field]);
+        payload[field] = this.parseId(data[field], field);
       }
     }
     if (data.weight !== undefined) {
@@ -394,12 +398,10 @@ class KpiService {
   }
 
   private static validateScoreLevelUpdate(data: Record<string, unknown>) {
+    this.assertObject(data, "KPI score level");
     const payload: Record<string, unknown> = {};
     if (data.kpi_indicator_id !== undefined) {
-      if (!Number.isInteger(Number(data.kpi_indicator_id)) || Number(data.kpi_indicator_id) <= 0) {
-        throw new ApiError("kpi_indicator_id must be a positive integer");
-      }
-      payload.kpi_indicator_id = Number(data.kpi_indicator_id);
+      payload.kpi_indicator_id = this.parseId(data.kpi_indicator_id, "kpi_indicator_id");
     }
     if (data.score !== undefined) {
       if (!this.isScore(data.score)) {
@@ -429,6 +431,19 @@ class KpiService {
     return (typeof value === "number" || (typeof value === "string" && value.trim() !== "")) && Number.isFinite(Number(value));
   }
 
+  private static assertObject(value: unknown, label: string): asserts value is Record<string, unknown> {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new ApiError(`${label} must be an object`);
+    }
+  }
+
+  private static parseId(value: unknown, field: string) {
+    if (!this.isNumber(value) || !Number.isSafeInteger(Number(value)) || Number(value) <= 0) {
+      throw new ApiError(`${field} must be a positive integer`);
+    }
+    return Number(value);
+  }
+
   private static isScore(value: unknown) {
     return this.isNumber(value) && Number.isInteger(Number(value)) && Number(value) >= 0 && Number(value) <= 255;
   }
@@ -450,14 +465,14 @@ class KpiService {
   }
 
   private static async findIndicator(id: number) {
-    if (!Number.isInteger(id) || id <= 0) throw new ApiError("id must be a positive integer");
+    id = this.parseId(id, "id");
     const indicator = await db.KpiIndicators.findByPk(id);
     if (!indicator) throw new ApiError("KPI indicator not found", 404);
     return indicator;
   }
 
   private static async findScoreLevel(id: number) {
-    if (!Number.isInteger(id) || id <= 0) throw new ApiError("id must be a positive integer");
+    id = this.parseId(id, "id");
     const scoreLevel = await db.KpiScoreLevels.findByPk(id, {
       include: [{ model: db.KpiIndicators, as: "kpi_indicator" }],
     });
@@ -466,7 +481,7 @@ class KpiService {
   }
 
   private static async findAssessmentValue(id: number, transaction?: Transaction) {
-    if (!Number.isInteger(id) || id <= 0) throw new ApiError("id must be a positive integer");
+    id = this.parseId(id, "id");
     const assessmentValue = await db.KpiAssessmentValues.findByPk(id, {
       transaction,
       ...(transaction ? { lock: transaction.LOCK.UPDATE } : {}),

@@ -1,13 +1,14 @@
 import { Request, Response } from "express";
 import KpiService from "../service/kpi.service";
+import { respondError } from "../utils/api-response.util";
 
 class KpiController {
   static async getIndicators(req: Request, res: Response) {
     try {
       const result = await KpiService.getIndicators();
       res.status(200).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 
@@ -16,8 +17,8 @@ class KpiController {
       const id = Number(req.params.id);
       const result = await KpiService.getIndicatorById(id);
       res.status(200).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 
@@ -25,8 +26,8 @@ class KpiController {
     try {
       const result = await KpiService.createIndicator(req.body);
       res.status(201).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 
@@ -34,8 +35,8 @@ class KpiController {
     try {
       const result = await KpiService.createScoreLevels(req.body);
       res.status(201).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 
@@ -43,8 +44,8 @@ class KpiController {
     try {
       const result = await KpiService.createAssessmentValues(req.body);
       res.status(201).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 
@@ -52,8 +53,8 @@ class KpiController {
     try {
       const result = await KpiService.getAssessmentValues(req.query);
       res.status(200).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 
@@ -64,8 +65,8 @@ class KpiController {
         true
       );
       res.status(200).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 
@@ -74,8 +75,8 @@ class KpiController {
       const id = Number(req.params.id);
       const result = await KpiService.getAssessmentValueById(id);
       res.status(200).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 
@@ -84,8 +85,8 @@ class KpiController {
       const id = Number(req.params.id);
       const result = await KpiService.updateAssessmentValue(id, req.body);
       res.status(200).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 
@@ -94,8 +95,8 @@ class KpiController {
       const id = Number(req.params.id);
       const result = await KpiService.updateAssessmentValueScores(id, req.body);
       res.status(200).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 
@@ -104,8 +105,8 @@ class KpiController {
       const id = Number(req.params.id);
       const result = await KpiService.deleteAssessmentValue(id);
       res.status(200).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 
@@ -113,8 +114,8 @@ class KpiController {
     try {
       const result = await KpiService.getScoreLevels();
       res.status(200).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 
@@ -123,8 +124,8 @@ class KpiController {
       const id = Number(req.params.id);
       const result = await KpiService.getScoreLevelById(id);
       res.status(200).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 
@@ -133,8 +134,8 @@ class KpiController {
       const id = Number(req.params.id);
       const result = await KpiService.updateScoreLevel(id, req.body);
       res.status(200).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 
@@ -143,8 +144,8 @@ class KpiController {
       const id = Number(req.params.id);
       const result = await KpiService.deleteScoreLevel(id);
       res.status(200).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 
@@ -153,8 +154,8 @@ class KpiController {
       const id = Number(req.params.id);
       const result = await KpiService.updateIndicator(id, req.body);
       res.status(200).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 
@@ -163,8 +164,8 @@ class KpiController {
       const id = Number(req.params.id);
       const result = await KpiService.deleteIndicator(id);
       res.status(200).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 
@@ -173,8 +174,8 @@ class KpiController {
       const id = Number(req.params.id);
       const result = await KpiService.submitAssessmentValue(id, req.body);
       res.status(200).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(error.status || 400).json({ success: false, message: error.message });
+    } catch (error: unknown) {
+      respondError(res, error);
     }
   }
 }

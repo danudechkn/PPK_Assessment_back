@@ -3,6 +3,9 @@ import CompetentController from "../controller/competent.controller";
 import AssessmentController from "../controller/assessmentcompetent.controller";
 import KpiController from "../controller/kpi.controller";
 const router = express.Router();
+
+
+
 // const apiLogger = require("../middleware/apiLogger");
 // const {
 //   authenticateToken,
@@ -11,7 +14,7 @@ const router = express.Router();
 
 // --- Competency master data ---
 router.get("/categories", CompetentController.getAllCategories); // ดูหมวดหมู่ categories ทั้งหมด
-// router.get("/categories/:categoryId/competencies", CompetentController.getCompetenciesByCategory); // ดู categories ของหมวดหมู่
+router.get("/categories/:id", CompetentController.getCategoryById); // ดูหมวดหมู่ categories รายการเดียว
 router.post("/categories", CompetentController.createCategory); // เพิ่มหมวดหมู่ categories (รองรับ dataArray)
 router.put("/categories/:id", CompetentController.updateCategory); // แก้ไขหมวดหมู่ categories
 router.delete("/categories/:id", CompetentController.deleteCategory); // ลบหมวดหมู่ categories
@@ -21,19 +24,20 @@ router.delete("/categories/:id", CompetentController.deleteCategory); // ลบ�
 //----------------------------------------------------------------------------------------------------------------
 
 router.get("/competencies", CompetentController.getCompetent); // ดู Competency ทั้งหมด
+router.get("/competencies/:id", CompetentController.getCompetentById); // ดู Competency รายการเดียว
 router.post("/competencies", CompetentController.createCompetent); // เพิ่ม Competency (รองรับ dataArray)
 router.put("/competencies/:id", CompetentController.updateCompetent); // แก้ไข Competency
 router.delete("/competencies/:id", CompetentController.deleteCompetent); // ลบ Competency
 
 router.get("/behaviors", CompetentController.getBehavior); // ดูพฤติกรรมประกอบ Competency ทั้งหมด
-// router.get("/competencies/:competencyId/behaviors", CompetentController.getBehaviorsByCompetency); // ดูพฤติกรรมของ Competency
-// router.get("/behaviors/:id", CompetentController.getBehaviorById); // ดูพฤติกรรมรายการเดียว
+router.get("/behaviors/:id", CompetentController.getBehaviorById); // ดูพฤติกรรมประกอบ Competency รายการเดียว
 router.post("/behaviors", CompetentController.createBehavior); // เพิ่มพฤติกรรม (รองรับ dataArray)
 router.put("/behaviors/:id", CompetentController.updateBehavior); // แก้ไขพฤติกรรม
 router.delete("/behaviors/:id", CompetentController.deleteBehavior); // ลบพฤติกรรม
 
 // --- Assessment order management ---
 router.get("/assessments", AssessmentController.getAllOrders); // ดูรอบการประเมินทั้งหมด (filter ได้)
+router.get("/assessments/:id", AssessmentController.getOrderById); // ดูรอบการประเมินรายการเดียว
 router.post("/assessments", AssessmentController.createOrder); // สร้างรอบการประเมิน
 router.put("/assessments/:id", AssessmentController.updateOrder); // แก้ไขรอบการประเมิน
 router.delete("/assessments/:id", AssessmentController.deleteOrder); // ลบรอบการประเมินและข้อมูลคะแนน
@@ -47,7 +51,7 @@ router.delete("/kpis/:id", KpiController.deleteIndicator); // ลบ KPI
 
 router.get("/kpi-levels", KpiController.getScoreLevels); // ดูระดับคะแนน KPI ทั้งหมด
 router.post("/kpi-levels", KpiController.createScoreLevels); // เพิ่มระดับคะแนน KPI (รองรับ dataArray)
-// router.get("/kpi-levels/:id", KpiController.getScoreLevelById); // ดูระดับคะแนน KPI รายการเดียว
+router.get("/kpi-levels/:id", KpiController.getScoreLevelById); // ดูระดับคะแนน KPI รายการเดียว
 router.put("/kpi-levels/:id", KpiController.updateScoreLevel); // แก้ไขระดับคะแนน KPI
 router.delete("/kpi-levels/:id", KpiController.deleteScoreLevel); // ลบระดับคะแนน KPI
 

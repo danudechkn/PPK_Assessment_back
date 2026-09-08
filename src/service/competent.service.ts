@@ -104,10 +104,31 @@ class CompetentService {
             limit,
             offset,
             order: [["id", "ASC"]],
+            include: [
+                {
+                    model: db.CompetencyCategories,
+                    as: "category",
+                    attributes: ["id", "name"],
+                },
+            ],
+        });
+        const formattedData = rows.map((row: any) => {
+            return {
+                id: row.id,
+                competency_category_id: row.competency_category_id,
+                type_person_id: row.type_person_id,
+                func_unit_id: row.func_unit_id,
+                position_level_id: row.position_level_id,
+                competency: row.competency,
+                expected_score: row.expected_score,
+                status: row.status,
+                category_name: row.category.name,
+                category_id: row.competency_category_id,
+            };
         });
 
         return {
-            data: rows,
+            data: formattedData,
             pagination: { page, limit, total: count, totalPages: Math.ceil(count / limit) },
         };
     }
@@ -125,7 +146,7 @@ class CompetentService {
     }
 
     static async createCompetent(body: unknown) {
-        const sanitizedData = this.getItems(body, 3).map((item) => this.competencyPayload(item, true));
+        const sanitizedData = this.getItems(body, 20).map((item) => this.competencyPayload(item, true));
         return await db.Competencies.bulkCreate(sanitizedData);
     }
 

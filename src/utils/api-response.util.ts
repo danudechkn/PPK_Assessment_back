@@ -21,12 +21,3 @@ export function respondError(res: Response, error: unknown) {
   console.error("API request failed", error);
   return res.status(500).json({ success: false, message: "Internal server error" });
 }
-
-export async function respond(res: Response, action: () => Promise<unknown>, status = 200) {
-  try {
-    const data = await action();
-    return res.status(status).json({ success: true, data });
-  } catch (error: unknown) {
-    return respondError(res, error);
-  }
-}

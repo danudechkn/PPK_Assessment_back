@@ -1,19 +1,36 @@
 import { Request, Response } from "express";
 import CompetentService from "../service/competent.service";
-import { respond, respondError } from "../utils/api-response.util";
+import { respondError } from "../utils/api-response.util";
 
 class CompetentController {
-
   static async getCategoryById(req: Request, res: Response) {
-    return respond(res, () => CompetentService.getCategoryById(Number(req.params.id)));
+    try {
+      const id = Number(req.params.id);
+      const result = await CompetentService.getCategoryById(id);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: unknown) {
+      respondError(res, error);
+    }
   }
 
   static async getCompetentById(req: Request, res: Response) {
-    return respond(res, () => CompetentService.getCompetentById(Number(req.params.id)));
+    try {
+      const id = Number(req.params.id);
+      const result = await CompetentService.getCompetentById(id);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: unknown) {
+      respondError(res, error);
+    }
   }
 
   static async getBehaviorById(req: Request, res: Response) {
-    return respond(res, () => CompetentService.getBehaviorById(Number(req.params.id)));
+    try {
+      const id = Number(req.params.id);
+      const result = await CompetentService.getBehaviorById(id);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: unknown) {
+      respondError(res, error);
+    }
   }
 
 

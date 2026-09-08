@@ -1,32 +1,7 @@
-import {
-  Model,
-  DataTypes,
-  InferAttributes,
-  InferCreationAttributes,
-  CreationOptional,
-} from "sequelize";
-import { sequelize } from "./index";
+import { QueryInterface, DataTypes } from "sequelize";
 
-class KpiAssessmentValues extends Model<
-  InferAttributes<KpiAssessmentValues>,
-  InferCreationAttributes<KpiAssessmentValues>
-> {
-  declare id: CreationOptional<number>;
-  declare value_order_id: number;
-  declare kpi_indicator_id: number;
-  declare actual_value: number | null;
-  declare user_value: number | null;
-  declare head_value: number | null;
-  declare submit_value: number | null;
-  declare weight: number;
-  declare weighted_score: number | null;
-  declare status: CreationOptional<string>;
-  declare createdAt: Date | null;
-  declare updatedAt: Date | null;
-}
-
-KpiAssessmentValues.init(
-  {
+export async function up(queryInterface: QueryInterface): Promise<void> {
+  await queryInterface.createTable("kpi_assessment_values", {
     id: {
       type: DataTypes.BIGINT.UNSIGNED,
       autoIncrement: true,
@@ -80,19 +55,11 @@ KpiAssessmentValues.init(
       allowNull: true,
       defaultValue: DataTypes.NOW,
     },
-  },
-  {
-    sequelize,
-    tableName: "kpi_assessment_values",
-    timestamps: false,
-    indexes: [
-      {
-        unique: true,
-        name: "uq_kpi_assessment_order_indicator",
-        fields: ["value_order_id", "kpi_indicator_id"],
-      },
-    ],
-  },
-);
+  });
+}
 
-export default KpiAssessmentValues;
+export async function down(queryInterface: QueryInterface): Promise<void> {
+  await queryInterface.dropTable("kpi_assessment_values");
+}
+
+module.exports = { up, down };

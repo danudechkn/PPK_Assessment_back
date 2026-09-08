@@ -1,36 +1,12 @@
-import {
-  Model,
-  DataTypes,
-  InferAttributes,
-  InferCreationAttributes,
-  CreationOptional,
-} from "sequelize";
-import { sequelize } from "./index";
+import { QueryInterface, DataTypes } from "sequelize";
 
-class ValueOrders extends Model<
-  InferAttributes<ValueOrders>,
-  InferCreationAttributes<ValueOrders>
-> {
-  declare id: CreationOptional<number>;
-  declare user_id: number | null;
-  declare head_id: number | null;
-  declare round: number | null;
-  declare year: number | null;
-  declare status: string | null;
-  declare createdAt: Date | null;
-  declare updatedAt: Date | null;
-
-  static associate(models: any) {
-    //
-  }
-}
-
-ValueOrders.init(
-  {
+export async function up(queryInterface: QueryInterface): Promise<void> {
+  await queryInterface.createTable("value_orders", {
     id: {
       type: DataTypes.BIGINT,
       autoIncrement: true,
       primaryKey: true,
+      allowNull: false,
     },
     user_id: {
       type: DataTypes.BIGINT,
@@ -63,12 +39,11 @@ ValueOrders.init(
       allowNull: true,
       defaultValue: DataTypes.NOW,
     },
-  },
-  {
-    sequelize,
-    tableName: "value_orders",
-    timestamps: false,
-  },
-);
+  });
+}
 
-export default ValueOrders;
+export async function down(queryInterface: QueryInterface): Promise<void> {
+  await queryInterface.dropTable("value_orders");
+}
+
+module.exports = { up, down };

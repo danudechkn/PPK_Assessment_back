@@ -1,38 +1,12 @@
-import {
-  Model,
-  DataTypes,
-  InferAttributes,
-  InferCreationAttributes,
-  CreationOptional,
-} from "sequelize";
-import { sequelize } from "./index";
+import { QueryInterface, DataTypes } from "sequelize";
 
-class Competencies extends Model<
-  InferAttributes<Competencies>,
-  InferCreationAttributes<Competencies>
-> {
-  declare id: CreationOptional<number>;
-  declare competency_category_id: number | null;
-  declare type_person_id: number | null;
-  declare func_unit_id: number | null;
-  declare position_level_id: number | null;
-  declare competency: string | null;
-  declare expected_score: number | null;
-  declare status: string | null;
-  declare createdAt: Date | null;
-  declare updatedAt: Date | null;
-
-  static associate(models: any) {
-    //
-  }
-}
-
-Competencies.init(
-  {
+export async function up(queryInterface: QueryInterface): Promise<void> {
+  await queryInterface.createTable("competencies", {
     id: {
       type: DataTypes.BIGINT,
       autoIncrement: true,
       primaryKey: true,
+      allowNull: false,
     },
     competency_category_id: {
       type: DataTypes.BIGINT,
@@ -73,12 +47,11 @@ Competencies.init(
       allowNull: true,
       defaultValue: DataTypes.NOW,
     },
-  },
-  {
-    sequelize,
-    tableName: "competencies",
-    timestamps: false,
-  },
-);
+  });
+}
 
-export default Competencies;
+export async function down(queryInterface: QueryInterface): Promise<void> {
+  await queryInterface.dropTable("competencies");
+}
+
+module.exports = { up, down };

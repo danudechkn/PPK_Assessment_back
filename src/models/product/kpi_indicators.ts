@@ -15,6 +15,8 @@ class KpiIndicators extends Model<
   declare name: string;
   declare weight: number;
   declare status: CreationOptional<string>;
+  declare createdAt: Date | null;
+  declare updatedAt: Date | null;
 }
 
 KpiIndicators.init(
@@ -38,6 +40,16 @@ KpiIndicators.init(
       type: DataTypes.CHAR(1),
       allowNull: false,
       defaultValue: "Y",
+    },
+    createdAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: DataTypes.NOW,
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: DataTypes.NOW,
     },
   },
   {

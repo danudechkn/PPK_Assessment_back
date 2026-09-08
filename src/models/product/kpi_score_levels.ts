@@ -16,6 +16,8 @@ class KpiScoreLevels extends Model<
   declare score: number;
   declare criteria_text: string;
   declare operator_type: string;
+  declare createdAt: Date | null;
+  declare updatedAt: Date | null;
 }
 
 KpiScoreLevels.init(
@@ -42,12 +44,28 @@ KpiScoreLevels.init(
       type: DataTypes.STRING(20),
       allowNull: false,
     },
+    createdAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: DataTypes.NOW,
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: DataTypes.NOW,
+    },
   },
   {
     sequelize,
     tableName: "kpi_score_levels",
     timestamps: false,
-        indexes: [{ unique: true, name: "uq_kpi_level_indicator_score", fields: ["kpi_indicator_id", "score"] }],
+    indexes: [
+      {
+        unique: true,
+        name: "uq_kpi_level_indicator_score",
+        fields: ["kpi_indicator_id", "score"],
+      },
+    ],
   },
 );
 

@@ -5,8 +5,8 @@ import { respondError } from "../utils/api-response.util";
 class KpiController {
   static async getIndicators(req: Request, res: Response) {
     try {
-      const result = await KpiService.getIndicators();
-      res.status(200).json({ success: true, data: result });
+      const result = await KpiService.getIndicators(req.query);
+      res.status(200).json({ success: true, ...result });
     } catch (error: unknown) {
       respondError(res, error);
     }

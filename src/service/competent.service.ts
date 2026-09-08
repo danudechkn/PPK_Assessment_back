@@ -2,80 +2,72 @@ import db from "../models/product";
 import { ApiError } from "../utils/api-response.util";
 import { parseScore } from "../utils/score.util";
 
+import {
+    PaginationQuery,
+    PaginationMeta,
+    PaginatedResult,
+    parsePagination,
+} from "../utils/pagination.util";
+
+export { PaginationQuery, PaginationMeta, PaginatedResult };
 
 class CompetentService {
+    // ==========================================
+    // Allowed Field Constants
+    // ==========================================
+    private static readonly CATEGORY_FIELDS = ["name", "status"] as const;
+    private static readonly COMPETENCY_FIELDS = [
+        "competency_category_id",
+        "type_person_id",
+        "func_unit_id",
+        "position_level_id",
+        "competency",
+        "expected_score",
+        "status",
+    ] as const;
+    private static readonly BEHAVIOR_FIELDS = ["competency_id", "description", "status"] as const;
+
+    // ==========================================
+    // 1. Competency Categories
+    // ==========================================
+
+    static async getAllCategories(query: PaginationQuery = {}) {
+        const { page, limit, offset } = this.parsePagination(query);
+
+        const { rows, count } = await db.CompetencyCategories.findAndCountAll({
+            limit,
+            offset,
+            order: [["id", "ASC"]],
+        });
+
+        return {
+            data: rows,
+            pagination: { page, limit, total: count, totalPages: Math.ceil(count / limit) },
+        };
+    }
+
+    static async getCategoriesFull() {
+        return await db.CompetencyCategories.findAll({
+            include: [
+                {
+                    model: db.Competencies,
+                    as: "competencies",
+                    include: [
+                        {
+                            model: db.Behavior,
+                            as: "behaviors",
+                        },
+                    ],
+                },
+            ],
+        });
+    }
 
     static async getCategoryById(id: number) {
         if (!Number.isSafeInteger(id) || id <= 0) throw new ApiError("id must be a positive integer");
         const result = await db.CompetencyCategories.findByPk(id);
         if (!result) throw new ApiError("Category not found", 404);
         return result;
-    }
-
-    static async getCompetentById(id: number) {
-        if (!Number.isSafeInteger(id) || id <= 0) throw new ApiError("id must be a positive integer");
-        const result = await db.Competencies.findByPk(id);
-        if (!result) throw new ApiError("Competency not found", 404);
-        return result;
-    }
-
-    static async getBehaviorById(id: number) {
-        if (!Number.isSafeInteger(id) || id <= 0) throw new ApiError("id must be a positive integer");
-        const result = await db.Behavior.findByPk(id);
-        if (!result) throw new ApiError("Behavior not found", 404);
-        return result;
-    }
-
-    private static readonly CATEGORY_FIELDS = ["name", "status"];
-    private static readonly COMPETENCY_FIELDS = ["competency_category_id", "type_person_id", "func_unit_id", "position_level_id", "competency", "expected_score", "status"];
-    private static readonly BEHAVIOR_FIELDS = ["competency_id", "description", "status"];
-
-    // --- Competencies_Categories ---
-
-    static async getAllCategories(query: { page?: unknown; limit?: unknown } = {}) {
-        const parsePositiveInteger = (value: unknown, fallback: number, field: string) => {
-            if (value === undefined) return fallback;
-            if (
-                (typeof value !== "string" && typeof value !== "number") ||
-                !/^\d+$/.test(String(value)) ||
-                !Number.isSafeInteger(Number(value)) ||
-                Number(value) <= 0
-            ) {
-                throw new ApiError(`${field} must be a positive integer`);
-            }
-            return Number(value);
-        };
-
-        const page = parsePositiveInteger(query.page, 1, "page");
-        const limit = parsePositiveInteger(query.limit, 10, "limit");
-        if (limit > 50) throw new ApiError("limit must be less than or equal to 50");
-        const offset = (page - 1) * limit;
-        if (!Number.isSafeInteger(offset)) throw new ApiError("page is too large");
-
-        const { rows, count } = await db.CompetencyCategories.findAndCountAll({
-            limit,
-            offset,
-            order: [["id", "ASC"]]
-        });
-
-        return {
-            data: rows,
-            pagination: { page, limit, total: count, totalPages: Math.ceil(count / limit) }
-        };
-    }
-
-
-    static async getCategoriesFull() {
-        return await db.CompetencyCategories.findAll({
-            include: [{
-                model: db.Competencies,
-                as: "competencies",
-                include: [{
-                    model: db.Behavior,
-                    as: "behaviors"
-                }]
-            }]
-        });
     }
 
     static async createCategory(body: unknown) {
@@ -100,10 +92,31 @@ class CompetentService {
         await category.destroy();
         return { message: "Category deleted successfully" };
     }
-    // --- Competencies ---
 
-    static async getAllCompetent() {
-        return await db.Competencies.findAll();
+    // ==========================================
+    // 2. Competencies
+    // ==========================================
+
+    static async getAllCompetent(query: PaginationQuery = {}) {
+        const { page, limit, offset } = this.parsePagination(query);
+
+        const { rows, count } = await db.Competencies.findAndCountAll({
+            limit,
+            offset,
+            order: [["id", "ASC"]],
+        });
+
+        return {
+            data: rows,
+            pagination: { page, limit, total: count, totalPages: Math.ceil(count / limit) },
+        };
+    }
+
+    static async getCompetentById(id: number) {
+        if (!Number.isSafeInteger(id) || id <= 0) throw new ApiError("id must be a positive integer");
+        const result = await db.Competencies.findByPk(id);
+        if (!result) throw new ApiError("Competency not found", 404);
+        return result;
     }
 
     static async getCompetenciesByCategory(categoryId: number) {
@@ -127,13 +140,30 @@ class CompetentService {
         return { message: "Competent deleted successfully" };
     }
 
+    // ==========================================
+    // 3. Behaviors
+    // ==========================================
 
+    static async getBehavior(query: PaginationQuery = {}) {
+        const { page, limit, offset } = this.parsePagination(query);
 
-    // --- Behavior ---
-
-    static async getBehavior() {
-        return await db.Behavior.findAll({
+        const { rows, count } = await db.Behavior.findAndCountAll({
+            limit,
+            offset,
+            order: [["id", "ASC"]],
         });
+
+        return {
+            data: rows,
+            pagination: { page, limit, total: count, totalPages: Math.ceil(count / limit) },
+        };
+    }
+
+    static async getBehaviorById(id: number) {
+        if (!Number.isSafeInteger(id) || id <= 0) throw new ApiError("id must be a positive integer");
+        const result = await db.Behavior.findByPk(id);
+        if (!result) throw new ApiError("Behavior not found", 404);
+        return result;
     }
 
     static async getBehaviorsByCompetency(competencyId: number) {
@@ -157,12 +187,25 @@ class CompetentService {
         return { message: "Behavior deleted successfully" };
     }
 
-    private static getItems(body: unknown, max: number): unknown[] {
-        if (!body || typeof body !== "object" || Array.isArray(body)) throw new ApiError("body must be an object");
-        const { dataArray } = body as Record<string, unknown>;
-        if (!Array.isArray(dataArray) || dataArray.length === 0) throw new ApiError("dataArray must be a non-empty array");
-        if (dataArray.length > max) throw new ApiError(`dataArray must contain at most ${max} items`);
-        return dataArray;
+    // ==========================================
+    // 4. Private Helpers & Validation
+    // ==========================================
+
+    private static parsePagination(query: PaginationQuery = {}, defaultLimit = 10, maxLimit = 50) {
+        return parsePagination(query, defaultLimit, maxLimit);
+    }
+
+    private static parseId(value: unknown, field: string, nullable = false): number | null {
+        if (nullable && (value === "" || value === null)) return null;
+        if (
+            (typeof value !== "number" && typeof value !== "string") ||
+            !/^\d+$/.test(String(value)) ||
+            !Number.isSafeInteger(Number(value)) ||
+            Number(value) <= 0
+        ) {
+            throw new ApiError(`${field} must be a positive integer`);
+        }
+        return Number(value);
     }
 
     private static validateText(value: unknown, field: string, max?: number) {
@@ -171,13 +214,31 @@ class CompetentService {
         }
     }
 
-    private static parseId(value: unknown, field: string, nullable = false): number | null {
-        if (nullable && (value === "" || value === null)) return null;
-        if ((typeof value !== "number" && typeof value !== "string") ||
-            !/^\d+$/.test(String(value)) || !Number.isSafeInteger(Number(value)) || Number(value) <= 0) {
-            throw new ApiError(`${field} must be a positive integer`);
+    private static getItems(body: unknown, max: number): unknown[] {
+        if (!body || typeof body !== "object" || Array.isArray(body)) throw new ApiError("body must be an object");
+        const { dataArray } = body as Record<string, unknown>;
+        if (!Array.isArray(dataArray) || dataArray.length === 0) throw new ApiError("dataArray must be a non-empty array");
+        if (dataArray.length > max) throw new ApiError(`dataArray must contain at most ${max} items`);
+        return dataArray;
+    }
+
+    private static pick(input: unknown, fields: readonly string[]) {
+        if (!input || typeof input !== "object" || Array.isArray(input)) throw new ApiError("Each item must be an object");
+        const data = input as Record<string, unknown>;
+        const payload = fields.reduce((result: Record<string, unknown>, field) => {
+            if (data[field] !== undefined) result[field] = data[field];
+            return result;
+        }, {});
+        if (Object.keys(payload).length === 0) throw new ApiError(`At least one of ${fields.join(", ")} is required`);
+        if (payload.status === "") payload.status = null;
+        if (
+            payload.status !== undefined &&
+            payload.status !== null &&
+            (typeof payload.status !== "string" || payload.status.length !== 1)
+        ) {
+            throw new ApiError("status must be a single character or null");
         }
-        return Number(value);
+        return payload;
     }
 
     private static competencyPayload(input: unknown, creating = false) {
@@ -189,31 +250,19 @@ class CompetentService {
         for (const field of ["type_person_id", "func_unit_id", "position_level_id"]) {
             if (payload[field] !== undefined) payload[field] = this.parseId(payload[field], field, true);
         }
-        if (payload.expected_score !== undefined) payload.expected_score = parseScore(payload.expected_score, "expected_score", 127, true);
+        if (payload.expected_score !== undefined) {
+            payload.expected_score = parseScore(payload.expected_score, "expected_score", 127, true);
+        }
         return payload;
     }
 
     private static behaviorPayload(input: unknown, creating = false) {
         const payload = this.pick(input, this.BEHAVIOR_FIELDS);
-        if (creating || payload.competency_id !== undefined) payload.competency_id = this.parseId(payload.competency_id, "competency_id");
+        if (creating || payload.competency_id !== undefined) {
+            payload.competency_id = this.parseId(payload.competency_id, "competency_id");
+        }
         if (payload.description !== undefined && payload.description !== null && typeof payload.description !== "string") {
             throw new ApiError("description must be a string or null");
-        }
-        return payload;
-    }
-
-    private static pick(input: unknown, fields: string[]) {
-        if (!input || typeof input !== "object" || Array.isArray(input)) throw new ApiError("Each item must be an object");
-        const data = input as Record<string, unknown>;
-        const payload = fields.reduce((result: Record<string, unknown>, field) => {
-            if (data[field] !== undefined) result[field] = data[field];
-            return result;
-        }, {});
-        if (Object.keys(payload).length === 0) throw new ApiError(`At least one of ${fields.join(", ")} is required`);
-        if (payload.status === "") payload.status = null;
-        if (payload.status !== undefined && payload.status !== null &&
-            (typeof payload.status !== "string" || payload.status.length !== 1)) {
-            throw new ApiError("status must be a single character or null");
         }
         return payload;
     }

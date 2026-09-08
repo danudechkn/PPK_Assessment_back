@@ -2,6 +2,7 @@ import { ApiError } from "../utils/api-response.util";
 import db from "../models/product";
 import { parseScore } from "../utils/score.util";
 import { Op, Transaction } from "sequelize";
+import { PaginationQuery, parsePagination } from "../utils/pagination.util";
 
 class KpiService {
   static async getAssessmentValues(filter: Record<string, unknown> = {}, groupByOrder = false) {
@@ -208,8 +209,17 @@ class KpiService {
     return { message: "KPI score level deleted successfully" };
   }
 
-  static async getIndicators() {
-    return db.KpiIndicators.findAll({ order: [["id", "ASC"]] });
+  static async getIndicators(query: PaginationQuery = {}) {
+    const { page, limit, offset } = this.parsePagination(query);
+    const { rows, count } = await db.KpiIndicators.findAndCountAll({
+      limit,
+      offset,
+      order: [["id", "ASC"]],
+    });
+    return {
+      data: rows,
+      pagination: { page, limit, total: count, totalPages: Math.ceil(count / limit) },
+    };
   }
 
   static async getIndicatorById(id: number) {
@@ -512,6 +522,10 @@ class KpiService {
       if (pairs.has(key)) throw new ApiError(message, 409);
       pairs.add(key);
     }
+  }
+
+  private static parsePagination(query: PaginationQuery = {}, defaultLimit = 10, maxLimit = 50) {
+    return parsePagination(query, defaultLimit, maxLimit);
   }
 }
 

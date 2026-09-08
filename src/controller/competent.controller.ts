@@ -21,8 +21,8 @@ class CompetentController {
 
   static async getCompetent(req: Request, res: Response) {
     try {
-      const result = await CompetentService.getAllCompetent();
-      res.status(200).json({ success: true, data: result });
+      const result = await CompetentService.getAllCompetent(req.query);
+      res.status(200).json({ success: true, ...result });
     } catch (error: unknown) {
       respondError(res, error);
     }
@@ -122,8 +122,8 @@ class CompetentController {
 
   static async getBehavior(req: Request, res: Response) {
     try {
-      const result = await CompetentService.getBehavior();
-      res.status(200).json({ success: true, data: result });
+      const result = await CompetentService.getBehavior(req.query);
+      res.status(200).json({ success: true, ...result });
     } catch (error: unknown) {
       respondError(res, error);
     }

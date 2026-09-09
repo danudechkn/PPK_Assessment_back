@@ -2,15 +2,17 @@ import express from "express";
 import CompetentController from "../controller/competent.controller";
 import AssessmentController from "../controller/assessmentcompetent.controller";
 import KpiController from "../controller/kpi.controller";
+import { ChoiceSetupController } from "../controller/choice-setup/chioiceSetup.controller";
 const router = express.Router();
-
-
 
 // const apiLogger = require("../middleware/apiLogger");
 // const {
 //   authenticateToken,
 //   authorizeRole,
 // } = require("../middleware/authMiddleware");
+
+// --- choice setup conpotency --- //
+router.get("/choice-setup", ChoiceSetupController.getListChoiceSetup);
 
 // --- Competency master data ---
 router.get("/categories", CompetentController.getAllCategories); // ดูหมวดหมู่ categories ทั้งหมด
@@ -60,7 +62,6 @@ router.get("/kpi-assessments/:id", KpiController.getAssessmentValueById); // ด
 router.post("/kpi-assessments", KpiController.createAssessmentValues); // สร้างผลประเมิน KPI (รองรับ dataArray)
 router.put("/kpi-assessments/:id", KpiController.updateAssessmentValue); // แก้ไขผลประเมิน KPI โดยผู้ดูแล
 router.delete("/kpi-assessments/:id", KpiController.deleteAssessmentValue); // ลบผลประเมิน KPI
-
 
 // router.use(authenticateToken, apiLogger, authorizeRole(1));
 

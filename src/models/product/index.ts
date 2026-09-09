@@ -142,6 +142,20 @@ db.KpiAssessmentValues.belongsTo(db.KpiIndicators, {
   as: "kpi_indicator",
 });
 
+// competency <-> positon level
+
+db.Competencies.belongsTo(db.PositionLevel, {
+  foreignKey: "position_level_id",
+  as: "position_level",
+});
+
+db.PositionLevel.hasMany(db.Competencies, {
+  foreignKey: "position_level_id",
+  as: "competencies",
+});
+
+// competency <-> positon level
+
 // 5. ส่งออกระบบไปใช้ร่วมกัน
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;

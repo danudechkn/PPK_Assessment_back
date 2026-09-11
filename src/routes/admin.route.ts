@@ -3,6 +3,11 @@ import CompetentController from "../controller/competent.controller";
 import AssessmentController from "../controller/assessmentcompetent.controller";
 import KpiController from "../controller/kpi.controller";
 import { ChoiceSetupController } from "../controller/choice-setup/chioiceSetup.controller";
+import { SetupFuncunitController } from "../controller/slot-setup-funcunit/setupFuncunit.controller";
+import {
+  authenticateToken,
+  authorizeRole,
+} from "../middleware/auth.middleware";
 const router = express.Router();
 
 // const apiLogger = require("../middleware/apiLogger");
@@ -10,6 +15,8 @@ const router = express.Router();
 //   authenticateToken,
 //   authorizeRole,
 // } = require("../middleware/authMiddleware");
+
+router.use(authenticateToken, authorizeRole(2));
 
 // --- choice setup conpotency --- //
 router.get("/choice-setup", ChoiceSetupController.getListChoiceSetup);
@@ -66,5 +73,17 @@ router.delete("/kpi-assessments/:id", KpiController.deleteAssessmentValue); // à
 // router.use(authenticateToken, apiLogger, authorizeRole(1));
 
 // router.get("/mapAll", AllChoiceController.mapAll);
+
+// slot setup funcunit person
+router.get(
+  "/person-in-dbcentralusers",
+  SetupFuncunitController.personInDBCentralusers,
+);
+
+router.post("/get-person-by-userid", SetupFuncunitController.getPersonByUserID);
+router.post(
+  "/create-edit-setup-person-funcunit",
+  SetupFuncunitController.createOrEditSetUpPersonFuncunit,
+);
 
 export default router;

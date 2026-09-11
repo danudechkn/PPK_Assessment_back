@@ -6,15 +6,25 @@ import {
   authorizeRole,
 } from "../middleware/auth.middleware";
 import CompetentController from "../controller/competent.controller";
+import { GetPersonController } from "../controller/get-person/getPerson.controller";
 
 const router = Router();
 
 router.use(authenticateToken, authorizeRole(1, 2));
 
+// updata by nes
 router.get(
   "/conpetency-by-access",
   CompetentController.getCompetentByUserAccess,
 );
+
+router.get("/check-self-assessment", AssessmentController.checkSelfAssessment);
+router.get(
+  "/get-person-by-funcunit",
+  GetPersonController.headGetPersonByFuncUnit,
+);
+
+//
 
 router.get("/competency-scores/:id", AssessmentController.getScoreById);
 router.get("/kpi-levels/:id", KpiController.getScoreLevelById);
@@ -22,6 +32,8 @@ router.get("/kpi-levels/:id", KpiController.getScoreLevelById);
 // const apiLogger = require("../middleware/apiLogger");
 
 // --- Assessment actions for the current user / evaluator ---
+router.get("/assessments", AssessmentController.getAllOrders);
+
 router.get(
   "/assessments/:orderId/summary",
   AssessmentController.getAssessmentSummary,

@@ -127,7 +127,12 @@ class CompetentService {
         // type_person_id: levelId,
         status: "Y",
       },
-      attributes: ["id", "competency_category_id", "competency"],
+      attributes: [
+        "id",
+        "competency_category_id",
+        "competency",
+        "expected_score",
+      ],
       include: [
         {
           model: db.CompetencyCategories,
@@ -146,7 +151,11 @@ class CompetentService {
       {
         category_id: number;
         category_name: string;
-        competencies: Array<{ id: number; competency: string }>;
+        competencies: Array<{
+          id: number;
+          competency: string;
+          expected_score: number;
+        }>;
       }
     >();
     for (const item of list as any[]) {
@@ -162,6 +171,7 @@ class CompetentService {
       categoryMap.get(catId)!.competencies.push({
         id: item.id,
         competency: item.competency,
+        expected_score: item.expected_score,
       });
     }
     // 3. แปลงผลลัพธ์จาก Map เป็น Array ส่งกลับ

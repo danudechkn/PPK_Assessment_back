@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
-import CompetentService from "../service/cmpetent/competent.service";
-import CategoriesService from "../service/cmpetent/categories.service";
-import BehaviorsService from "../service/cmpetent/behaviors.service";
+import CompetentService from "../service/competent/competent.service";
+import CategoriesService from "../service/competent/categories.service";
+import BehaviorsService from "../service/competent/behaviors.service";
 import { respondError } from "../utils/api-response.util";
 import { AuthenticatedRequest } from "../middleware/auth.middleware"; //
 

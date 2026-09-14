@@ -76,7 +76,14 @@ export class getPersonService {
         ],
       };
       const person = await dbppk.AppPerson.findAll({
-        attributes: ["id", "firstname", "lastname", "OffID", "PosID"],
+        attributes: [
+          "id",
+          "firstname",
+          "lastname",
+          "OffID",
+          "PosID",
+          "FuncunitID",
+        ],
         where: personWhereCondition,
         include: [
           {
@@ -90,6 +97,12 @@ export class getPersonService {
             as: "OfficePerson",
             required: false,
             attributes: ["offname"],
+          },
+          {
+            model: dbppk.AppPersonFunctionalUnit,
+            as: "FuncUnit",
+            required: false,
+            attributes: ["FuncunitName"],
           },
           {
             model: dbppk.AppUser,
@@ -135,9 +148,11 @@ export class getPersonService {
         return {
           no: index + 1,
           id: item.id,
+          userid: item.Users?.[0]?.userid || item.Users?.[1]?.userid || null,
           name: doctor_name || person_name,
           posName: item.Position?.Positionname || null,
           offName: item.OfficePerson?.offname || null,
+          funcunitName: item.FuncUnit?.FuncunitName || null,
         };
       });
       return formatPerson;
@@ -146,4 +161,50 @@ export class getPersonService {
       throw error;
     }
   }
+
+  // static async getPersonByUserId(userId: number) {
+  //   try {
+  //     const person = await dbppk.AppPerson.findOne({
+  //       attributes: ["id", "firstname", "lastname", "OffID", "PosID"],
+  //       include: [
+  //         {
+  //           model: dbppk.AppPositions,
+  //           as: "Position",
+  //           required: false,
+  //           attributes: ["Positionname"],
+  //         },
+  //         {
+  //           model: dbppk.PersonnalOfficeGroup,
+  //           as: "OfficePerson",
+  //           required: false,
+  //           attributes: ["offname"],
+  //         },
+  //         {
+  //           model: dbppk.AppUser,
+  //           as: "Users",
+  //           required: false,
+  //           attributes: ["userid"],
+  //           where: {
+  //             userid: userId,
+  //           },
+  //         },
+  //         {
+  //           model: dbppk.DoctorName,
+  //           as: "DoctorNameInfo",
+  //           required: false,
+  //         },
+  //       ],
+  //     });
+  //     if (!person) {
+  //       throw new Error("ไม่พบข้อมูลบุคลากร");
+  //     }
+  //     const format = {
+
+  //     }
+  //     return person;
+  //   } catch (error) {
+  //     console.error("Error in getPersonByUserId:", error);
+  //     throw error;
+  //   }
+  // }
 }

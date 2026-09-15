@@ -82,7 +82,7 @@ export class getPersonService {
           "lastname",
           "OffID",
           "PosID",
-          "FuncunitID",
+          "FuncUnitID",
         ],
         where: personWhereCondition,
         include: [
@@ -152,7 +152,9 @@ export class getPersonService {
           name: doctor_name || person_name,
           posName: item.Position?.Positionname || null,
           offName: item.OfficePerson?.offname || null,
+          offID: item.OffID || null,
           funcunitName: item.FuncUnit?.FuncunitName || null,
+          funcID: item.FuncUnitID || null,
         };
       });
       return formatPerson;

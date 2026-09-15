@@ -84,13 +84,31 @@ class AssessmentController {
 
   static async saveScores(req: Request, res: Response) {
     try {
-      const authUser = (req as any).user;
-      const userId = req.body?.user_id || authUser?.id || authUser?.userid;
-      const result = await AssessmentService.saveScores(
-        req.body?.orderId,
-        req.body?.items,
-        userId,
-      );
+      const authUser = (req as AuthenticatedRequest).user;
+      const currentUserId = authUser?.userid || authUser?.id;
+
+      // รองรับทั้ง mode: "SELF" | "HEAD" และ fallback ผ่าน isHead: true | false
+      const rawMode = req.body?.mode;
+      const isHead =
+        req.body?.isHead === true ||
+        (typeof rawMode === "string" &&
+          rawMode.trim().toUpperCase() === "HEAD");
+      const mode: "SELF" | "HEAD" = isHead ? "HEAD" : "SELF";
+
+      // ถ้าเป็น HEAD: userId คือเป้าหมายลูกน้องที่ถูกประเมิน (จาก body)
+      // ถ้าเป็น SELF: userId คือตนเอง (จาก token)
+      const targetUserId =
+        mode === "HEAD"
+          ? req.body?.user_id
+          : currentUserId || req.body?.user_id;
+
+      const result = await AssessmentService.saveScores({
+        orderId: req.body?.orderId,
+        items: req.body?.items,
+        userId: targetUserId,
+        headId: currentUserId,
+        mode,
+      });
       res.status(200).json({ success: true, data: result });
     } catch (error: unknown) {
       respondError(res, error);
@@ -132,10 +150,18 @@ class AssessmentController {
 
   static async checkSelfAssessment(req: Request, res: Response) {
     try {
-      const userid = (req as AuthenticatedRequest).user?.userid;
-      const result = await AssessmentService.checkSelfAssessment(
-        Number(userid),
-      );
+      const authUser = (req as AuthenticatedRequest).user;
+      const tokenUserId = authUser?.userid || authUser?.id;
+
+      // 💡 ถ้าส่ง query ?userId=... มา (หัวหน้าตรวจสอบลูกน้อง) ให้ใช้ ID ลูกน้อง
+      // ถ้าไม่ได้ส่ง query มา (พนักงานตรวจสอบตัวเอง) ให้ใช้ ID จาก token
+      const queryUserId = req.query.userId || req.query.userid;
+      const targetUserId = queryUserId
+        ? Number(queryUserId)
+        : Number(tokenUserId);
+
+      const result = await AssessmentService.checkSelfAssessment(targetUserId);
+
       res.status(200).json({ success: true, data: result });
     } catch (error: unknown) {
       respondError(res, error);

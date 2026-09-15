@@ -116,14 +116,14 @@ class CompetentService {
 
   static async getCompetencyByPosAndFuncAndLevel(
     offID: number,
-    funcId: number,
+    funcID: number,
     // levelId: number,
   ) {
     // 1. ดึงข้อมูล Competencies ทั้งหมดที่ตรงเงื่อนไขพร้อม JOIN Category
     const list = await db.Competencies.findAll({
       where: {
         type_person_id: offID,
-        func_unit_id: funcId,
+        func_unit_id: funcID,
         // type_person_id: levelId,
         status: "Y",
       },

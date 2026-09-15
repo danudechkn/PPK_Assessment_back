@@ -96,11 +96,11 @@ class CompetentController {
 
       // console.log(userToken);
       // 💡 ลำดับความสำคัญ: ถ้าส่ง Query Params มาให้ใช้ก่อน ถ้าไม่ส่งให้ดึงจาก Token
-      const offID = req.query.offid
-        ? Number(req.query.offid)
+      const offID = req.query.offID
+        ? Number(req.query.offID)
         : Number(userToken?.OffID);
-      const funcId = req.query.funcid
-        ? Number(req.query.funcid)
+      const funcID = req.query.funcID
+        ? Number(req.query.funcID)
         : Number(userToken?.funcUnitID);
       // ⚠️ ตรวจสอบว่าได้ค่าทั้ง 2 ตัวครบหรือไม่
       if (!Number.isSafeInteger(offID) || offID <= 0) {
@@ -108,7 +108,7 @@ class CompetentController {
           .status(400)
           .json({ success: false, message: "ไม่พบข้อมูลระดับตำแหน่ง (posid)" });
       }
-      if (!Number.isSafeInteger(funcId) || funcId <= 0) {
+      if (!Number.isSafeInteger(funcID) || funcID <= 0) {
         return res
           .status(400)
           .json({ success: false, message: "ไม่พบข้อมูลหน่วยงาน (funcid)" });
@@ -116,8 +116,14 @@ class CompetentController {
       // เรียก Service
       const result = await CompetentService.getCompetencyByPosAndFuncAndLevel(
         offID,
-        funcId,
+        funcID,
       );
+
+      if (!result || result?.length <= 0) {
+        return res
+          .status(400)
+          .json({ success: false, message: "ไม่พบข้อมูลสมรรถนะ" });
+      }
       res.status(200).json({ success: true, data: result });
     } catch (error: unknown) {
       respondError(res, error);

@@ -1,3 +1,4 @@
+import { Op } from "sequelize";
 import db from "../../models/product";
 import { ApiError } from "../../utils/api-response.util";
 import { parseScore } from "../../utils/score.util";
@@ -9,7 +10,6 @@ class AssessmentService {
   // ==========================================
 
   static async checkSelfAssessment(userId: number) {
-    // console.log(userId);
     const { round, year } = AssessmentHelper.getCurrentRoundAndYear();
 
     const data = await db.ValueOrders.findOne({
@@ -22,21 +22,62 @@ class AssessmentService {
       ],
     });
 
-    const total_score =
-      data?.value_data_list?.reduce(
-        (acc: any, item: { user_value?: number; [key: string]: unknown }) =>
-          acc + (item?.user_value || 0),
-        0,
-      ) ?? 0;
+    const valueList = data?.value_data_list || [];
 
-    return {
+    // 1. คำนวณคะแนนและสถานะฝั่งลูกน้อง (Self)
+    const total_user_score = valueList.reduce(
+      (acc: number, item: any) => acc + (Number(item?.user_value) || 0),
+      0,
+    );
+    const hasSelfAssessed = valueList.some(
+      (item: any) => item?.user_value != null,
+    );
+
+    // 2. คำนวณคะแนนและสถานะฝั่งหัวหน้า (Head)
+    const total_head_score = valueList.reduce(
+      (acc: number, item: any) => acc + (Number(item?.head_value) || 0),
+      0,
+    );
+    const hasHeadAssessed = valueList.some(
+      (item: any) => item?.head_value != null,
+    );
+
+    // 3. รายการคะแนนที่หัวหน้าเคยประเมิน
+    const isHeadValue = valueList.map(
+      (item: { head_value: number | string | null; quest: string | number }) => ({
+        quest: item.quest,
+        head_value: item.head_value,
+      }),
+    );
+
+    // 4. รายการคะแนนทั้งหมด
+    const scores = valueList.map((item: any) => ({
+      quest: item.quest,
+      user_value: item.user_value,
+      head_value: item.head_value,
+    }));
+
+    const userCheck = {
       id: data?.id ?? null,
       user_id: data?.user_id ?? userId,
+      head_id: data?.head_id ?? null,
       round: data?.round ?? round,
       year: data?.year ?? year,
       status: data?.status || "pending",
       createdAt: data?.createdAt ?? null,
-      total_score,
+      total_score: total_user_score,
+      total_user_score,
+      total_head_score,
+      hasSelfAssessed,
+      hasHeadAssessed,
+    };
+
+    return {
+      userCheck,
+      isHeadValue,
+      scores,
+      hasSelfAssessed,
+      hasHeadAssessed,
     };
   }
 
@@ -127,10 +168,141 @@ class AssessmentService {
   }
 
   static async saveScores(
-    orderIdInput: unknown,
-    items: unknown,
+    paramsOrOrderId:
+      | {
+          orderId?: unknown;
+          items: unknown;
+          userId?: unknown;
+          headId?: number;
+          mode?: "SELF" | "HEAD" | string;
+          isHead?: boolean;
+        }
+      | unknown,
+    itemsInput?: unknown,
     userIdInput?: unknown,
+    headIdInput?: number,
+    modeInput?: "SELF" | "HEAD" | string,
   ) {
+    let orderId: unknown;
+    let items: unknown;
+    let userId: unknown;
+    let headId: number | undefined;
+    let mode: "SELF" | "HEAD" = "SELF";
+
+    if (
+      paramsOrOrderId &&
+      typeof paramsOrOrderId === "object" &&
+      "items" in (paramsOrOrderId as Record<string, unknown>)
+    ) {
+      const opts = paramsOrOrderId as {
+        orderId?: unknown;
+        items: unknown;
+        userId?: unknown;
+        headId?: number;
+        mode?: "SELF" | "HEAD" | string;
+        isHead?: boolean;
+      };
+      orderId = opts.orderId;
+      items = opts.items;
+      userId = opts.userId;
+      headId = opts.headId;
+      mode =
+        opts.isHead === true ||
+        (typeof opts.mode === "string" &&
+          opts.mode.trim().toUpperCase() === "HEAD")
+          ? "HEAD"
+          : "SELF";
+    } else {
+      orderId = paramsOrOrderId;
+      items = itemsInput;
+      userId = userIdInput;
+      headId = headIdInput;
+      mode =
+        typeof modeInput === "string" &&
+        modeInput.trim().toUpperCase() === "HEAD"
+          ? "HEAD"
+          : "SELF";
+    }
+
+    // 🔀 Switch case ตาม Mode การประเมิน
+    switch (mode) {
+      case "HEAD":
+        return this.saveHeadScores({
+          orderId,
+          items,
+          targetUserId: userId,
+          headId,
+        });
+
+      case "SELF":
+      default:
+        return this.saveSelfScores({
+          orderId,
+          items,
+          userId,
+        });
+    }
+  }
+
+  /**
+   * บันทึกคะแนนการประเมินตนเอง (Self Assessment)
+   */
+  static async saveSelfScores({
+    orderId,
+    items,
+    userId,
+  }: {
+    orderId?: unknown;
+    items: unknown;
+    userId?: unknown;
+  }) {
+    return this.persistScores({
+      orderIdInput: orderId,
+      items,
+      targetUserIdInput: userId,
+      isHead: false,
+    });
+  }
+
+  /**
+   * บันทึกคะแนนโดยหัวหน้างาน (Head Assessment)
+   */
+  static async saveHeadScores({
+    orderId,
+    items,
+    targetUserId,
+    headId,
+  }: {
+    orderId?: unknown;
+    items: unknown;
+    targetUserId?: unknown;
+    headId?: number;
+  }) {
+    return this.persistScores({
+      orderIdInput: orderId,
+      items,
+      targetUserIdInput: targetUserId,
+      headId,
+      isHead: true,
+    });
+  }
+
+  /**
+   * จัดการ Transaction และบันทึกข้อมูลลง ValueOrders และ ValueData
+   */
+  private static async persistScores({
+    orderIdInput,
+    items,
+    targetUserIdInput,
+    headId,
+    isHead,
+  }: {
+    orderIdInput?: unknown;
+    items: unknown;
+    targetUserIdInput?: unknown;
+    headId?: number;
+    isHead: boolean;
+  }) {
     const validatedItems = AssessmentHelper.parseScoreItems(items);
 
     return db.sequelize.transaction(async (transaction: any) => {
@@ -142,13 +314,21 @@ class AssessmentService {
         orderIdInput !== ""
       ) {
         orderId = AssessmentHelper.parsePositiveId(orderIdInput, "orderId");
-        await AssessmentHelper.ensureOrder(orderId, transaction);
+        const order = await AssessmentHelper.ensureOrder(orderId, transaction);
+
+        // ถ้าหัวหน้ามาประเมิน และ order ยังไม่มี head_id หรือเปลี่ยนหัวหน้า ให้อัปเดต
+        if (isHead && headId && order.head_id !== headId) {
+          await order.update({ head_id: headId }, { transaction });
+        }
       } else if (
-        userIdInput !== undefined &&
-        userIdInput !== null &&
-        userIdInput !== ""
+        targetUserIdInput !== undefined &&
+        targetUserIdInput !== null &&
+        targetUserIdInput !== ""
       ) {
-        const userId = AssessmentHelper.parsePositiveId(userIdInput, "userId");
+        const userId = AssessmentHelper.parsePositiveId(
+          targetUserIdInput,
+          isHead ? "targetUserId (ลูกน้อง)" : "userId",
+        );
         const { round, year } = AssessmentHelper.getCurrentRoundAndYear();
 
         let order = await db.ValueOrders.findOne({
@@ -161,16 +341,25 @@ class AssessmentService {
           order = await db.ValueOrders.create(
             {
               user_id: userId,
+              head_id: isHead ? headId : null,
               round,
               year,
               status: "pending",
             },
             { transaction },
           );
+        } else if (isHead && headId && !order.head_id) {
+          // ถ้ามี order อยู่แล้ว (เช่น ลูกน้องทำ self ไว้ก่อน) ให้ผูก head_id เข้าไป
+          await order.update({ head_id: headId }, { transaction });
         }
         orderId = order.id;
       } else {
-        throw new ApiError("Either orderId or userId must be provided", 400);
+        throw new ApiError(
+          isHead
+            ? "กรุณาระบุ orderId หรือ user_id ของผู้รับการประเมิน"
+            : "Either orderId or userId must be provided",
+          400,
+        );
       }
 
       const results = [];

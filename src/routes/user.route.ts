@@ -7,6 +7,8 @@ import {
 } from "../middleware/auth.middleware";
 import CompetentController from "../controller/competent.controller";
 import { GetPersonController } from "../controller/get-person/getPerson.controller";
+import { KpiSetUpController } from "../controller/kpi/kpiIndicatorsSetup.controller";
+import { KpiScoreLevelsController } from "../controller/kpi/kpiScoreLevels.controler";
 
 const router = Router();
 
@@ -51,6 +53,16 @@ router.put(
 ); // ยืนยันคะแนนสุดท้าย
 
 // --- KPI assessment data ---
+router.get("/kpi-indicators", KpiSetUpController.index);
+router.get("/kpi-indicators/:id", KpiSetUpController.show);
+router.get("/kpi-score-levels", KpiScoreLevelsController.index);
+router.get("/kpi-score-levels/get-kpi", KpiScoreLevelsController.getKpi);
+router.get(
+  "/kpi-score-levels/by-indicator/:indicatorId",
+  KpiScoreLevelsController.getByIndicator,
+);
+router.get("/kpi-score-levels/:id", KpiScoreLevelsController.show);
+
 router.get("/kpi-levels", KpiController.getScoreLevels); // ดูระดับคะแนน KPI
 router.get("/kpi-assessments/:orderId", KpiController.getUserAssessmentValues); // ID รอบประเมิน; ส่ง { value_order, kpi_assessments }
 router.put("/kpi-assessments/:id", KpiController.updateAssessmentValueScores); // ID รายการผล KPI; บันทึก actual_value, user_value หรือ head_value

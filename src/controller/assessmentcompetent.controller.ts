@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import AssessmentService from "../service/assessmentcompetent/assessmentcompetent.service";
 import { respondError } from "../utils/api-response.util";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
+import { AssessmentMode } from "../types/assessmentcompetent";
 
 class AssessmentController {
   static async getOrderById(req: Request, res: Response) {
@@ -87,26 +88,31 @@ class AssessmentController {
       const authUser = (req as AuthenticatedRequest).user;
       const currentUserId = authUser?.userid || authUser?.id;
 
-      // รองรับทั้ง mode: "SELF" | "HEAD" และ fallback ผ่าน isHead: true | false
-      const rawMode = req.body?.mode;
-      const isHead =
-        req.body?.isHead === true ||
-        (typeof rawMode === "string" &&
-          rawMode.trim().toUpperCase() === "HEAD");
-      const mode: "SELF" | "HEAD" = isHead ? "HEAD" : "SELF";
+      // รองรับ mode: "SELF" | "HEAD" | "AGREEMENT" และ fallback ผ่าน isHead: true | false
+      const rawMode =
+        typeof req.body?.mode === "string"
+          ? req.body.mode.trim().toUpperCase()
+          : "";
+      const isHead = req.body?.isHead === true || rawMode === "HEAD";
+      const mode: AssessmentMode = isHead
+        ? "HEAD"
+        : rawMode === "AGREEMENT"
+        ? "AGREEMENT"
+        : "SELF";
 
-      // ถ้าเป็น HEAD: userId คือเป้าหมายลูกน้องที่ถูกประเมิน (จาก body)
+      // ถ้าเป็น HEAD หรือ AGREEMENT: userId คือเป้าหมายลูกน้องที่ถูกประเมิน (จาก body)
       // ถ้าเป็น SELF: userId คือตนเอง (จาก token)
       const targetUserId =
-        mode === "HEAD"
+        mode === "HEAD" || mode === "AGREEMENT"
           ? req.body?.user_id
           : currentUserId || req.body?.user_id;
 
       const result = await AssessmentService.saveScores({
         orderId: req.body?.orderId,
         items: req.body?.items,
+        item: req.body?.item,
         userId: targetUserId,
-        headId: currentUserId,
+        headId: req.body?.head_id || currentUserId,
         mode,
       });
       res.status(200).json({ success: true, data: result });

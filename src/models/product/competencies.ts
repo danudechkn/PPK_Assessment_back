@@ -18,6 +18,7 @@ class Competencies extends Model<
   declare position_level_id: number | null;
   declare competency: string | null;
   declare expected_score: number | null;
+  declare weight: string | null;
   declare status: string | null;
   declare createdAt: Date | null;
   declare updatedAt: Date | null;
@@ -57,6 +58,11 @@ Competencies.init(
     expected_score: {
       type: DataTypes.TINYINT,
       allowNull: true,
+    },
+    weight: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: 0,
     },
     status: {
       type: DataTypes.CHAR(1),

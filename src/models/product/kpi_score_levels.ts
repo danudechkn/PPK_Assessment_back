@@ -13,8 +13,10 @@ class KpiScoreLevels extends Model<
 > {
   declare id: CreationOptional<number>;
   declare kpi_indicator_id: number;
-  declare score: number;
   declare criteria_text: string;
+  declare score: number;
+  declare expected_score: number | null;
+  declare weight: string | null;
   declare operator_type: string;
   declare createdAt: Date | null;
   declare updatedAt: Date | null;
@@ -32,13 +34,22 @@ KpiScoreLevels.init(
       type: DataTypes.BIGINT.UNSIGNED,
       allowNull: false,
     },
-    score: {
-      type: DataTypes.TINYINT.UNSIGNED,
-      allowNull: false,
+    expected_score: {
+      type: DataTypes.TINYINT,
+      allowNull: true,
     },
     criteria_text: {
       type: DataTypes.STRING(255),
       allowNull: false,
+    },
+    score: {
+      type: DataTypes.TINYINT.UNSIGNED,
+      allowNull: false,
+    },
+    weight: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+      defaultValue: 0,
     },
     operator_type: {
       type: DataTypes.STRING(20),

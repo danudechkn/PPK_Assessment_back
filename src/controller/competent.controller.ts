@@ -4,6 +4,7 @@ import CategoriesService from "../service/competent/categories.service";
 import BehaviorsService from "../service/competent/behaviors.service";
 import { respondError } from "../utils/api-response.util";
 import { AuthenticatedRequest } from "../middleware/auth.middleware"; //
+import { KpiScoreLevelsService } from "../service/kpi/kpiScoreLevels.service";
 
 class CompetentController {
   // ==========================================
@@ -114,17 +115,16 @@ class CompetentController {
           .json({ success: false, message: "ไม่พบข้อมูลหน่วยงาน (funcid)" });
       }
       // เรียก Service
-      const result = await CompetentService.getCompetencyByPosAndFuncAndLevel(
-        offID,
-        funcID,
-      );
+      const competency =
+        await CompetentService.getCompetencyByPosAndFuncAndLevel(offID, funcID);
+      const kpi = await KpiScoreLevelsService.getKpi();
 
-      if (!result || result?.length <= 0) {
+      if (!competency || competency?.length <= 0) {
         return res
           .status(400)
           .json({ success: false, message: "ไม่พบข้อมูลสมรรถนะ" });
       }
-      res.status(200).json({ success: true, data: result });
+      res.status(200).json({ success: true, data: { kpi, competency } });
     } catch (error: unknown) {
       respondError(res, error);
     }

@@ -12,9 +12,15 @@ export class AssessmentHelper {
     "round",
     "year",
     "status",
+    "total_value",
+    "type_order_id",
   ] as const;
 
-  static readonly SCORE_FIELDS = ["user_value", "head_value"] as const;
+  static readonly SCORE_FIELDS = [
+    "user_value",
+    "head_value",
+    "submit_value",
+  ] as const;
 
   // ==========================================
   // Validation Helpers

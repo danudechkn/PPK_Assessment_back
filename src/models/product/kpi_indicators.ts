@@ -13,7 +13,7 @@ class KpiIndicators extends Model<
 > {
   declare id: CreationOptional<number>;
   declare name: string;
-  declare weight: number;
+  // declare weight: number;
   declare status: CreationOptional<string>;
   declare createdAt: Date | null;
   declare updatedAt: Date | null;
@@ -32,10 +32,10 @@ KpiIndicators.init(
       allowNull: false,
       unique: true,
     },
-    weight: {
-      type: DataTypes.DECIMAL(5, 2),
-      allowNull: false,
-    },
+    // weight: {
+    //   type: DataTypes.DECIMAL(5, 2),
+    //   allowNull: false,
+    // },
     status: {
       type: DataTypes.CHAR(1),
       allowNull: false,

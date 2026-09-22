@@ -3,12 +3,23 @@ import db from "../../models/product";
 import { ApiError } from "../../utils/api-response.util";
 import { parseScore } from "../../utils/score.util";
 import { AssessmentHelper } from "./helper/assessment.helper";
+import {
+  AssessmentMode,
+  AssessmentStatus,
+  SaveScoresParams,
+  SaveSelfScoresParams,
+  SaveHeadScoresParams,
+  SaveAgreementScoresParams,
+} from "../../types/assessmentcompetent";
 
 class AssessmentService {
-  // ==========================================
-  // 0. Self Assessment check by user
-  // ==========================================
+  // =================================================================
+  // 0. Self Assessment Check
+  // =================================================================
 
+  /**
+   * ตรวจสอบสถานะการประเมินตนเองและคะแนนภาพรวมของผู้ใช้ในรอบ/ปีปัจจุบัน
+   */
   static async checkSelfAssessment(userId: number) {
     const { round, year } = AssessmentHelper.getCurrentRoundAndYear();
 
@@ -22,68 +33,12 @@ class AssessmentService {
       ],
     });
 
-    const valueList = data?.value_data_list || [];
-
-    // 1. คำนวณคะแนนและสถานะฝั่งลูกน้อง (Self)
-    const total_user_score = valueList.reduce(
-      (acc: number, item: any) => acc + (Number(item?.user_value) || 0),
-      0,
-    );
-    const hasSelfAssessed = valueList.some(
-      (item: any) => item?.user_value != null,
-    );
-
-    // 2. คำนวณคะแนนและสถานะฝั่งหัวหน้า (Head)
-    const total_head_score = valueList.reduce(
-      (acc: number, item: any) => acc + (Number(item?.head_value) || 0),
-      0,
-    );
-    const hasHeadAssessed = valueList.some(
-      (item: any) => item?.head_value != null,
-    );
-
-    // 3. รายการคะแนนที่หัวหน้าเคยประเมิน
-    const isHeadValue = valueList.map(
-      (item: { head_value: number | string | null; quest: string | number }) => ({
-        quest: item.quest,
-        head_value: item.head_value,
-      }),
-    );
-
-    // 4. รายการคะแนนทั้งหมด
-    const scores = valueList.map((item: any) => ({
-      quest: item.quest,
-      user_value: item.user_value,
-      head_value: item.head_value,
-    }));
-
-    const userCheck = {
-      id: data?.id ?? null,
-      user_id: data?.user_id ?? userId,
-      head_id: data?.head_id ?? null,
-      round: data?.round ?? round,
-      year: data?.year ?? year,
-      status: data?.status || "pending",
-      createdAt: data?.createdAt ?? null,
-      total_score: total_user_score,
-      total_user_score,
-      total_head_score,
-      hasSelfAssessed,
-      hasHeadAssessed,
-    };
-
-    return {
-      userCheck,
-      isHeadValue,
-      scores,
-      hasSelfAssessed,
-      hasHeadAssessed,
-    };
+    return this.calculateAssessmentSummary(data, userId, round, year);
   }
 
-  // ==========================================
+  // =================================================================
   // 1. Assessment Orders Management
-  // ==========================================
+  // =================================================================
 
   static async getOrderById(id: number) {
     AssessmentHelper.assertPositiveId(id, "id");
@@ -133,10 +88,12 @@ class AssessmentService {
       });
       if (!order) throw new ApiError("Assessment order not found", 404);
 
-      await db.KpiAssessmentValues.destroy({
-        where: { value_order_id: id },
-        transaction,
-      });
+      if (db.KpiAssessmentValues) {
+        await db.KpiAssessmentValues.destroy({
+          where: { value_order_id: id },
+          transaction,
+        });
+      }
       await db.ValueData.destroy({
         where: { value_order_id: id },
         transaction,
@@ -147,9 +104,200 @@ class AssessmentService {
     return { message: "Assessment order deleted successfully" };
   }
 
-  // ==========================================
-  // 2. Assessment Scores Management
-  // ==========================================
+  // =================================================================
+  // 2. Assessment Scores Management (Save / Update / Submit)
+  // =================================================================
+
+  /**
+   * บันทึกคะแนน Competency รองรับทั้ง SELF, HEAD และ AGREEMENT
+   */
+  static async saveScores(
+    paramsOrOrderId: SaveScoresParams | unknown,
+    itemsInput?: unknown,
+    userIdInput?: unknown,
+    headIdInput?: number,
+    modeInput?: AssessmentMode | string,
+  ) {
+    const { orderId, items, itemGroup, userId, headId, mode } = this.parseSaveParams(
+      paramsOrOrderId,
+      itemsInput,
+      userIdInput,
+      headIdInput,
+      modeInput,
+    );
+
+    // 🔀 กระจายตาม Mode การประเมิน
+    switch (mode) {
+      case "HEAD":
+        return this.saveHeadScores({
+          orderId,
+          items,
+          item: itemGroup,
+          targetUserId: userId,
+          headId,
+        });
+
+      case "AGREEMENT":
+        return this.saveAgreementScores({
+          orderId,
+          items,
+          item: itemGroup,
+          userId,
+          headId,
+        });
+
+      case "SELF":
+      default:
+        return this.saveSelfScores({
+          orderId,
+          items,
+          item: itemGroup,
+          userId,
+        });
+    }
+  }
+
+  /**
+   * บันทึกคะแนนการประเมินตนเอง (Self Assessment)
+   */
+  static async saveSelfScores({
+    orderId,
+    items,
+    item,
+    userId,
+  }: SaveSelfScoresParams) {
+    return this.persistScores({
+      orderIdInput: orderId,
+      items,
+      multiTypeItems: item,
+      targetUserIdInput: userId,
+      isHead: false,
+      mode: "SELF",
+    });
+  }
+
+  /**
+   * บันทึกคะแนนโดยหัวหน้างาน (Head Assessment)
+   */
+  static async saveHeadScores({
+    orderId,
+    items,
+    item,
+    targetUserId,
+    headId,
+  }: SaveHeadScoresParams) {
+    return this.persistScores({
+      orderIdInput: orderId,
+      items,
+      multiTypeItems: item,
+      targetUserIdInput: targetUserId,
+      headId,
+      isHead: true,
+      mode: "HEAD",
+    });
+  }
+
+  /**
+   * บันทึกคะแนนข้อตกลงร่วมกัน (Agreement Assessment)
+   */
+  static async saveAgreementScores({
+    orderId,
+    items,
+    item,
+    userId,
+    headId,
+  }: SaveAgreementScoresParams) {
+    return this.persistScores({
+      orderIdInput: orderId,
+      items,
+      multiTypeItems: item,
+      targetUserIdInput: userId,
+      headId,
+      isHead: true,
+      mode: "AGREEMENT",
+    });
+  }
+
+  /**
+   * แก้ไขคะแนนรายข้อ (เฉพาะรายการที่ยังไม่ได้ยืนยันผล submit_value หรือยังไม่ COMPLETED)
+   */
+  static async updateScoreItem(id: number, data: unknown) {
+    AssessmentHelper.assertPositiveId(id, "scoreId");
+    const payload = AssessmentHelper.scorePayload(data);
+
+    return db.sequelize.transaction(async (transaction: any) => {
+      const score = await db.ValueData.findByPk(id, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (!score) throw new ApiError("Score item not found", 404);
+
+      if (score.value_order_id) {
+        const order = await db.ValueOrders.findByPk(score.value_order_id, {
+          transaction,
+        });
+        if (order?.status === "COMPLETED") {
+          throw new ApiError(
+            "This competency assessment has already been completed and cannot be changed",
+            409,
+          );
+        }
+      }
+
+      const isSavingSubmitValue = "submit_value" in payload;
+      if (!isSavingSubmitValue) {
+        AssessmentHelper.assertEditable(score);
+      }
+      return score.update(payload, { transaction });
+    });
+  }
+
+  /**
+   * ยืนยันคะแนนสุดท้ายรายข้อ (Final submit_value)
+   */
+  static async submitScoreItem(id: number, submitValue: unknown) {
+    AssessmentHelper.assertPositiveId(id, "scoreId");
+    const finalScore = parseScore(submitValue, "submit_value", 127);
+
+    return db.sequelize.transaction(async (transaction: any) => {
+      const score = await db.ValueData.findByPk(id, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+      if (!score) throw new ApiError("Score item not found", 404);
+
+      if (score.value_order_id) {
+        const order = await db.ValueOrders.findByPk(score.value_order_id, {
+          transaction,
+        });
+        if (order?.status === "COMPLETED") {
+          throw new ApiError(
+            "This competency assessment has already been completed and cannot be changed",
+            409,
+          );
+        }
+      }
+
+      if (score.user_value == null || score.head_value == null) {
+        throw new ApiError(
+          "Both user_value and head_value are required before submitting the final score",
+        );
+      }
+
+      await score.update({ submit_value: finalScore }, { transaction });
+
+      // ถ้าทุกข้อของ order นี้มี submit_value ครบแล้ว ให้เปลี่ยนสถานะ order เป็น COMPLETED
+      if (score.value_order_id) {
+        await this.syncOrderCompletion(score.value_order_id, transaction);
+      }
+
+      return score;
+    });
+  }
+
+  // =================================================================
+  // 3. Summary & Sheet Reports
+  // =================================================================
 
   static async getScoreById(id: number) {
     AssessmentHelper.assertPositiveId(id, "id");
@@ -167,272 +315,6 @@ class AssessmentService {
     });
   }
 
-  static async saveScores(
-    paramsOrOrderId:
-      | {
-          orderId?: unknown;
-          items: unknown;
-          userId?: unknown;
-          headId?: number;
-          mode?: "SELF" | "HEAD" | string;
-          isHead?: boolean;
-        }
-      | unknown,
-    itemsInput?: unknown,
-    userIdInput?: unknown,
-    headIdInput?: number,
-    modeInput?: "SELF" | "HEAD" | string,
-  ) {
-    let orderId: unknown;
-    let items: unknown;
-    let userId: unknown;
-    let headId: number | undefined;
-    let mode: "SELF" | "HEAD" = "SELF";
-
-    if (
-      paramsOrOrderId &&
-      typeof paramsOrOrderId === "object" &&
-      "items" in (paramsOrOrderId as Record<string, unknown>)
-    ) {
-      const opts = paramsOrOrderId as {
-        orderId?: unknown;
-        items: unknown;
-        userId?: unknown;
-        headId?: number;
-        mode?: "SELF" | "HEAD" | string;
-        isHead?: boolean;
-      };
-      orderId = opts.orderId;
-      items = opts.items;
-      userId = opts.userId;
-      headId = opts.headId;
-      mode =
-        opts.isHead === true ||
-        (typeof opts.mode === "string" &&
-          opts.mode.trim().toUpperCase() === "HEAD")
-          ? "HEAD"
-          : "SELF";
-    } else {
-      orderId = paramsOrOrderId;
-      items = itemsInput;
-      userId = userIdInput;
-      headId = headIdInput;
-      mode =
-        typeof modeInput === "string" &&
-        modeInput.trim().toUpperCase() === "HEAD"
-          ? "HEAD"
-          : "SELF";
-    }
-
-    // 🔀 Switch case ตาม Mode การประเมิน
-    switch (mode) {
-      case "HEAD":
-        return this.saveHeadScores({
-          orderId,
-          items,
-          targetUserId: userId,
-          headId,
-        });
-
-      case "SELF":
-      default:
-        return this.saveSelfScores({
-          orderId,
-          items,
-          userId,
-        });
-    }
-  }
-
-  /**
-   * บันทึกคะแนนการประเมินตนเอง (Self Assessment)
-   */
-  static async saveSelfScores({
-    orderId,
-    items,
-    userId,
-  }: {
-    orderId?: unknown;
-    items: unknown;
-    userId?: unknown;
-  }) {
-    return this.persistScores({
-      orderIdInput: orderId,
-      items,
-      targetUserIdInput: userId,
-      isHead: false,
-    });
-  }
-
-  /**
-   * บันทึกคะแนนโดยหัวหน้างาน (Head Assessment)
-   */
-  static async saveHeadScores({
-    orderId,
-    items,
-    targetUserId,
-    headId,
-  }: {
-    orderId?: unknown;
-    items: unknown;
-    targetUserId?: unknown;
-    headId?: number;
-  }) {
-    return this.persistScores({
-      orderIdInput: orderId,
-      items,
-      targetUserIdInput: targetUserId,
-      headId,
-      isHead: true,
-    });
-  }
-
-  /**
-   * จัดการ Transaction และบันทึกข้อมูลลง ValueOrders และ ValueData
-   */
-  private static async persistScores({
-    orderIdInput,
-    items,
-    targetUserIdInput,
-    headId,
-    isHead,
-  }: {
-    orderIdInput?: unknown;
-    items: unknown;
-    targetUserIdInput?: unknown;
-    headId?: number;
-    isHead: boolean;
-  }) {
-    const validatedItems = AssessmentHelper.parseScoreItems(items);
-
-    return db.sequelize.transaction(async (transaction: any) => {
-      let orderId: number;
-
-      if (
-        orderIdInput !== undefined &&
-        orderIdInput !== null &&
-        orderIdInput !== ""
-      ) {
-        orderId = AssessmentHelper.parsePositiveId(orderIdInput, "orderId");
-        const order = await AssessmentHelper.ensureOrder(orderId, transaction);
-
-        // ถ้าหัวหน้ามาประเมิน และ order ยังไม่มี head_id หรือเปลี่ยนหัวหน้า ให้อัปเดต
-        if (isHead && headId && order.head_id !== headId) {
-          await order.update({ head_id: headId }, { transaction });
-        }
-      } else if (
-        targetUserIdInput !== undefined &&
-        targetUserIdInput !== null &&
-        targetUserIdInput !== ""
-      ) {
-        const userId = AssessmentHelper.parsePositiveId(
-          targetUserIdInput,
-          isHead ? "targetUserId (ลูกน้อง)" : "userId",
-        );
-        const { round, year } = AssessmentHelper.getCurrentRoundAndYear();
-
-        let order = await db.ValueOrders.findOne({
-          where: { user_id: userId, round, year },
-          transaction,
-          lock: transaction.LOCK.UPDATE,
-        });
-
-        if (!order) {
-          order = await db.ValueOrders.create(
-            {
-              user_id: userId,
-              head_id: isHead ? headId : null,
-              round,
-              year,
-              status: "pending",
-            },
-            { transaction },
-          );
-        } else if (isHead && headId && !order.head_id) {
-          // ถ้ามี order อยู่แล้ว (เช่น ลูกน้องทำ self ไว้ก่อน) ให้ผูก head_id เข้าไป
-          await order.update({ head_id: headId }, { transaction });
-        }
-        orderId = order.id;
-      } else {
-        throw new ApiError(
-          isHead
-            ? "กรุณาระบุ orderId หรือ user_id ของผู้รับการประเมิน"
-            : "Either orderId or userId must be provided",
-          400,
-        );
-      }
-
-      const results = [];
-
-      for (const { quest, scores } of validatedItems) {
-        const competency = await db.Competencies.findByPk(quest, {
-          transaction,
-        });
-        if (!competency)
-          throw new ApiError(`Competency ${quest} not found`, 404);
-
-        const existing = await db.ValueData.findOne({
-          where: { value_order_id: orderId, quest },
-          transaction,
-          lock: transaction.LOCK.UPDATE,
-        });
-
-        if (existing) {
-          AssessmentHelper.assertEditable(existing);
-          results.push(await existing.update(scores, { transaction }));
-        } else {
-          results.push(
-            await db.ValueData.create(
-              { value_order_id: orderId, quest, ...scores },
-              { transaction },
-            ),
-          );
-        }
-      }
-      return results;
-    });
-  }
-
-  static async updateScoreItem(id: number, data: unknown) {
-    AssessmentHelper.assertPositiveId(id, "scoreId");
-    const payload = AssessmentHelper.scorePayload(data);
-
-    return db.sequelize.transaction(async (transaction: any) => {
-      const score = await db.ValueData.findByPk(id, {
-        transaction,
-        lock: transaction.LOCK.UPDATE,
-      });
-      if (!score) throw new ApiError("Score item not found", 404);
-      AssessmentHelper.assertEditable(score);
-      return score.update(payload, { transaction });
-    });
-  }
-
-  /** Final scores are immutable after confirmation. */
-  static async submitScoreItem(id: number, submitValue: unknown) {
-    AssessmentHelper.assertPositiveId(id, "scoreId");
-    const finalScore = parseScore(submitValue, "submit_value", 127);
-
-    return db.sequelize.transaction(async (transaction: any) => {
-      const score = await db.ValueData.findByPk(id, {
-        transaction,
-        lock: transaction.LOCK.UPDATE,
-      });
-      if (!score) throw new ApiError("Score item not found", 404);
-      AssessmentHelper.assertEditable(score);
-      if (score.user_value == null || score.head_value == null) {
-        throw new ApiError(
-          "Both user_value and head_value are required before submitting the final score",
-        );
-      }
-      return score.update({ submit_value: finalScore }, { transaction });
-    });
-  }
-
-  // ==========================================
-  // 3. Summary & Sheet Reports
-  // ==========================================
-
   static async getAssessmentSummary(orderId: number) {
     AssessmentHelper.assertPositiveId(orderId, "orderId");
     const order = await AssessmentHelper.ensureOrder(orderId);
@@ -443,11 +325,13 @@ class AssessmentService {
         include: [{ model: db.Competencies, as: "quest_competency" }],
         order: [["quest", "ASC"]],
       }),
-      db.KpiAssessmentValues.findAll({
-        where: { value_order_id: orderId },
-        include: [{ model: db.KpiIndicators, as: "kpi_indicator" }],
-        order: [["id", "ASC"]],
-      }),
+      db.KpiAssessmentValues
+        ? db.KpiAssessmentValues.findAll({
+            where: { value_order_id: orderId },
+            include: [{ model: db.KpiIndicators, as: "kpi_indicator" }],
+            order: [["id", "ASC"]],
+          })
+        : Promise.resolve([]),
     ]);
 
     return {
@@ -486,6 +370,532 @@ class AssessmentService {
     return {
       value_order: order,
       categories: AssessmentHelper.formatSheetCategories(categories),
+    };
+  }
+
+  // =================================================================
+  // 4. Private Core Helpers (Clean Code & Business Orchestration)
+  // =================================================================
+
+  /**
+   * ทำความสะอาดและแปลง Input Params ให้เป็นรูปแบบมาตรฐาน
+   */
+  private static parseSaveParams(
+    paramsOrOrderId: SaveScoresParams | unknown,
+    itemsInput?: unknown,
+    userIdInput?: unknown,
+    headIdInput?: number,
+    modeInput?: AssessmentMode | string,
+  ) {
+    let orderId: unknown;
+    let items: unknown;
+    let itemGroup: unknown;
+    let userId: unknown;
+    let headId: number | undefined;
+    let rawMode: unknown;
+    let isHead = false;
+
+    if (
+      paramsOrOrderId &&
+      typeof paramsOrOrderId === "object"
+    ) {
+      const opts = paramsOrOrderId as SaveScoresParams;
+      orderId = opts.orderId;
+      items = opts.items;
+      itemGroup = (opts as any).item;
+      userId = opts.userId;
+      headId = opts.headId;
+      rawMode = opts.mode;
+      isHead = opts.isHead === true;
+    } else {
+      orderId = paramsOrOrderId;
+      items = itemsInput;
+      userId = userIdInput;
+      headId = headIdInput;
+      rawMode = modeInput;
+    }
+
+    const normalizedMode =
+      typeof rawMode === "string" ? rawMode.trim().toUpperCase() : "";
+
+    const mode: AssessmentMode =
+      isHead || normalizedMode === "HEAD"
+        ? "HEAD"
+        : normalizedMode === "AGREEMENT"
+        ? "AGREEMENT"
+        : "SELF";
+
+    return { orderId, items, itemGroup, userId, headId, mode };
+  }
+
+  /**
+   * ควบคุม Transaction และรันขั้นตอนการบันทึกคะแนนทั้งหมด
+   * รองรับทั้งการบันทึกแบบเดี่ยว และแบบพร้อมกันหลายกลุ่มตาม type_order_id (1 = KPI, 2 = Competency)
+   */
+  private static async persistScores({
+    orderIdInput,
+    items,
+    multiTypeItems,
+    targetUserIdInput,
+    headId,
+    isHead,
+    mode,
+  }: {
+    orderIdInput?: unknown;
+    items?: unknown;
+    multiTypeItems?: unknown;
+    targetUserIdInput?: unknown;
+    headId?: number;
+    isHead: boolean;
+    mode?: AssessmentMode;
+  }) {
+    // ตรวจสอบว่าส่งข้อมูลแบบหลายกลุ่ม (item: [{ type_order_id, value }]) มาหรือไม่
+    const isMultiType =
+      Array.isArray(multiTypeItems) &&
+      multiTypeItems.length > 0 &&
+      multiTypeItems.some((g: any) => g && ("type_order_id" in g || "value" in g));
+
+    return db.sequelize.transaction(async (transaction: any) => {
+      if (isMultiType) {
+        const groupResults = [];
+
+        for (const group of multiTypeItems as any[]) {
+          const typeOrderId = Number(group.type_order_id) || 2;
+          const rawGroupItems = group.value ?? group.items ?? [];
+          const validatedItems = AssessmentHelper.parseScoreItems(rawGroupItems);
+
+          // 1. ค้นหาหรือสร้าง Order ตาม type_order_id
+          const order = await this.resolveOrderForScores({
+            transaction,
+            orderIdInput: group.orderId,
+            targetUserIdInput,
+            headId,
+            isHead,
+            typeOrderId,
+          });
+
+          if (order && order.status === "COMPLETED") {
+            throw new ApiError(
+              `Assessment order (type ${typeOrderId}) has already been completed and cannot be changed`,
+              409,
+            );
+          }
+
+          // 2. บันทึกคะแนนลง ValueData
+          const results = await this.upsertScoreItems({
+            transaction,
+            orderId: order.id,
+            validatedItems,
+            typeOrderId,
+            isAgreement: mode === "AGREEMENT",
+          });
+
+          // 3. ปรับสถานะ Order และคำนวณ total_value
+          await this.syncOrderStatus({
+            transaction,
+            order,
+            typeOrderId,
+          });
+
+          groupResults.push({
+            type_order_id: typeOrderId,
+            orderId: order.id,
+            status: order.status,
+            total_value: order.total_value,
+            scores: results,
+          });
+        }
+
+        return groupResults;
+      }
+
+      // กรณีส่งแบบเดิม (Single type - ค่าเริ่มต้น Competency type_order_id: 2)
+      const validatedItems = AssessmentHelper.parseScoreItems(items);
+      const defaultTypeOrderId = 2;
+
+      const order = await this.resolveOrderForScores({
+        transaction,
+        orderIdInput,
+        targetUserIdInput,
+        headId,
+        isHead,
+        typeOrderId: defaultTypeOrderId,
+      });
+
+      if (order && order.status === "COMPLETED") {
+        throw new ApiError(
+          "This competency assessment has already been completed and cannot be changed",
+          409,
+        );
+      }
+
+      const results = await this.upsertScoreItems({
+        transaction,
+        orderId: order.id,
+        validatedItems,
+        typeOrderId: defaultTypeOrderId,
+        isAgreement: mode === "AGREEMENT",
+      });
+
+      await this.syncOrderStatus({
+        transaction,
+        order,
+        typeOrderId: defaultTypeOrderId,
+      });
+
+      return results;
+    });
+  }
+
+  /**
+   * ค้นหาหรือสร้าง ValueOrders พร้อมล็อกแถวใน Transaction โดยแยกตาม type_order_id
+   */
+  private static async resolveOrderForScores({
+    transaction,
+    orderIdInput,
+    targetUserIdInput,
+    headId,
+    isHead,
+    typeOrderId,
+  }: {
+    transaction: any;
+    orderIdInput?: unknown;
+    targetUserIdInput?: unknown;
+    headId?: number;
+    isHead: boolean;
+    typeOrderId?: number;
+  }) {
+    // กรณีที่ 1: ส่ง orderId มาโดยตรง
+    if (
+      orderIdInput !== undefined &&
+      orderIdInput !== null &&
+      orderIdInput !== ""
+    ) {
+      const orderId = AssessmentHelper.parsePositiveId(orderIdInput, "orderId");
+      const order = await AssessmentHelper.ensureOrder(orderId, transaction);
+
+      if (isHead && headId && order.head_id !== headId) {
+        await order.update({ head_id: headId }, { transaction });
+      }
+      return order;
+    }
+
+    // กรณีที่ 2: ส่ง targetUserId มา ค้นหาตามรอบ/ปีปัจจุบัน และ type_order_id
+    if (
+      targetUserIdInput !== undefined &&
+      targetUserIdInput !== null &&
+      targetUserIdInput !== ""
+    ) {
+      const userId = AssessmentHelper.parsePositiveId(
+        targetUserIdInput,
+        isHead ? "targetUserId (ลูกน้อง)" : "userId",
+      );
+      const { round, year } = AssessmentHelper.getCurrentRoundAndYear();
+
+      const whereClause: any = { user_id: userId, round, year };
+      if (typeOrderId !== undefined && typeOrderId !== null) {
+        whereClause.type_order_id = typeOrderId;
+      }
+
+      let order = await db.ValueOrders.findOne({
+        where: whereClause,
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (!order) {
+        order = await db.ValueOrders.create(
+          {
+            user_id: userId,
+            head_id: isHead ? headId : null,
+            round,
+            year,
+            status: "PENDING",
+            type_order_id: typeOrderId ?? null,
+            total_value: 0,
+          },
+          { transaction },
+        );
+      } else if (isHead && headId && order.head_id !== headId) {
+        await order.update({ head_id: headId }, { transaction });
+      }
+
+      return order;
+    }
+
+    throw new ApiError(
+      isHead
+        ? "กรุณาระบุ orderId หรือ user_id ของผู้รับการประเมิน"
+        : "Either orderId or userId must be provided",
+      400,
+    );
+  }
+
+  /**
+   * วนลูปบันทึกหรืออัปเดตคะแนนลงใน ValueData
+   */
+  private static async upsertScoreItems({
+    transaction,
+    orderId,
+    validatedItems,
+    typeOrderId = 2,
+    isAgreement = false,
+  }: {
+    transaction: any;
+    orderId: number;
+    validatedItems: Array<{ quest: number; scores: Record<string, unknown> }>;
+    typeOrderId?: number;
+    isAgreement?: boolean;
+  }) {
+    const results = [];
+
+    for (const { quest, scores } of validatedItems) {
+      if (typeOrderId === 1) {
+        const indicator = await db.KpiIndicators.findByPk(quest, { transaction });
+        if (!indicator) {
+          throw new ApiError(`KPI indicator ${quest} not found`, 404);
+        }
+      } else {
+        const competency = await db.Competencies.findByPk(quest, { transaction });
+        if (!competency) {
+          throw new ApiError(`Competency ${quest} not found`, 404);
+        }
+      }
+
+      const existing = await db.ValueData.findOne({
+        where: { value_order_id: orderId, quest },
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
+
+      if (existing) {
+        const isSavingSubmitValue = "submit_value" in scores;
+        if (!isAgreement && !isSavingSubmitValue) {
+          AssessmentHelper.assertEditable(existing);
+        }
+        results.push(await existing.update(scores, { transaction }));
+      } else {
+        results.push(
+          await db.ValueData.create(
+            { value_order_id: orderId, quest, ...scores },
+            { transaction },
+          ),
+        );
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * คำนวณและปรับปรุงสถานะของ ValueOrders พร้อมคิดคะแนนรวม total_value ตามประเภท
+   */
+  private static async syncOrderStatus({
+    transaction,
+    order,
+    typeOrderId,
+  }: {
+    transaction: any;
+    order: any;
+    typeOrderId?: number;
+  }) {
+    if (!order) return;
+
+    const allValues = await db.ValueData.findAll({
+      where: { value_order_id: order.id },
+      transaction,
+    });
+
+    if (allValues.length === 0) return;
+
+    // 🎯 1. ตรวจสอบสถานะ Order
+    const isAllSubmitted = allValues.every(
+      (item: any) => item.submit_value != null,
+    );
+    const hasUserValues = allValues.some((item: any) => item.user_value != null);
+    const hasHeadValues = allValues.some((item: any) => item.head_value != null);
+
+    let nextStatus: AssessmentStatus = "PENDING";
+    if (isAllSubmitted) {
+      nextStatus = "COMPLETED";
+    } else if (hasUserValues && hasHeadValues) {
+      nextStatus = "WAITING_AGREEMENT";
+    } else if (hasUserValues) {
+      nextStatus = "SELF_SUBMITTED";
+    } else if (hasHeadValues) {
+      nextStatus = "HEAD_SUBMITTED";
+    }
+
+    // 🎯 2. คำนวณคะแนนรวม total_value
+    let computedTotal: number | null = null;
+    const currentTypeId = typeOrderId ?? order.type_order_id ?? 2;
+
+    if (currentTypeId === 1) {
+      // 🟢 Type 1 = KPI
+      const scoreLevels = await db.KpiScoreLevels.findAll({
+        attributes: ["kpi_indicator_id", "score", "weight"],
+        transaction,
+      });
+
+      let sumWeighted = 0;
+      for (const val of allValues) {
+        const score = val.submit_value ?? val.head_value ?? val.user_value;
+        if (score != null) {
+          const matched = scoreLevels.find(
+            (lvl: any) =>
+              Number(lvl.kpi_indicator_id) === Number(val.quest) &&
+              Number(lvl.score) === Number(score),
+          );
+          const weight = matched ? Number(matched.weight || 0) : 0;
+          sumWeighted += (Number(score) * weight) / 100;
+        }
+      }
+      computedTotal = Number((sumWeighted * 20).toFixed(2));
+    } else {
+      // 🟢 Type 2 = Competency
+      const competencies = await db.Competencies.findAll({
+        attributes: ["id", "weight"],
+        transaction,
+      });
+      const weightMap = new Map<number, number>(
+        competencies.map((c: any) => [Number(c.id), Number(c.weight || 1)]),
+      );
+
+      let sumTotal = 0;
+      for (const val of allValues) {
+        const score = val.submit_value ?? val.head_value ?? val.user_value;
+        if (score != null) {
+          const w = weightMap.get(Number(val.quest)) ?? 1;
+          sumTotal += Number(score) * w;
+        }
+      }
+      computedTotal = Number(sumTotal.toFixed(2));
+    }
+
+    const updates: any = {};
+    if (order.status !== nextStatus) {
+      updates.status = nextStatus;
+      order.status = nextStatus;
+    }
+    if (computedTotal !== null && order.total_value !== computedTotal) {
+      updates.total_value = computedTotal;
+      order.total_value = computedTotal;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await order.update(updates, { transaction });
+    }
+  }
+
+  /**
+   * ตรวจสอบว่ายืนยันคะแนนสุดท้ายครบทุกข้อหรือยัง ถ้าครบให้อัปเดตสถานะเป็น COMPLETED
+   */
+  private static async syncOrderCompletion(orderId: number, transaction: any) {
+    const remainingUnsubmitted = await db.ValueData.count({
+      where: {
+        value_order_id: orderId,
+        submit_value: null,
+      },
+      transaction,
+    });
+
+    if (remainingUnsubmitted === 0) {
+      await db.ValueOrders.update(
+        { status: "COMPLETED" },
+        { where: { id: orderId }, transaction },
+      );
+    }
+  }
+
+  /**
+   * สรุปผลคะแนนและจัดรูปแบบ Object สำหรับ checkSelfAssessment
+   */
+  private static calculateAssessmentSummary(
+    data: any,
+    userId: number,
+    round: number,
+    year: number,
+  ) {
+    const valueList = data?.value_data_list || [];
+
+    const totalUserScore = valueList.reduce(
+      (acc: number, item: any) => acc + (Number(item?.user_value) || 0),
+      0,
+    );
+    const hasSelfAssessed = valueList.some(
+      (item: any) => item?.user_value != null,
+    );
+
+    const totalHeadScore = valueList.reduce(
+      (acc: number, item: any) => acc + (Number(item?.head_value) || 0),
+      0,
+    );
+    const hasHeadAssessed = valueList.some(
+      (item: any) => item?.head_value != null,
+    );
+
+    // ตรวจสอบว่าทุกข้อมี submit_value ครบถ้วนแล้วหรือไม่
+    const isAllSubmitted =
+      valueList.length > 0 &&
+      valueList.every((item: any) => item?.submit_value != null);
+
+    let status = (data?.status as AssessmentStatus) || "PENDING";
+    if (isAllSubmitted) {
+      status = "COMPLETED";
+      // ถ้าใน DB ยังเป็น WAITING_AGREEMENT ให้อัปเดตเป็น COMPLETED ให้ตรงกัน
+      if (data?.id && data.status !== "COMPLETED") {
+        db.ValueOrders.update(
+          { status: "COMPLETED" },
+          { where: { id: data.id } },
+        ).catch(() => {});
+      }
+    }
+
+    const isHeadValue = valueList.map((item: any) => ({
+      quest: item.quest,
+      head_value: item.head_value,
+    }));
+
+    const isSubmitValue = valueList.map((item: any) => ({
+      quest: item.quest,
+      submit_value: item.submit_value,
+    }));
+
+    const scores = valueList.map((item: any) => ({
+      quest: item.quest,
+      user_value: item.user_value,
+      head_value: item.head_value,
+      submit_value: item.submit_value,
+    }));
+
+    const totalSubmitScore = valueList.reduce(
+      (acc: number, item: any) => acc + (Number(item?.submit_value) || 0),
+      0,
+    );
+
+    const userCheck = {
+      id: data?.id ?? null,
+      user_id: data?.user_id ?? userId,
+      head_id: data?.head_id ?? null,
+      round: data?.round ?? round,
+      year: data?.year ?? year,
+      status,
+      createdAt: data?.createdAt ?? null,
+      total_score: isAllSubmitted ? totalSubmitScore : totalUserScore,
+      total_submit_score: totalSubmitScore,
+      total_user_score: totalUserScore,
+      total_head_score: totalHeadScore,
+      hasSelfAssessed,
+      hasHeadAssessed,
+    };
+
+    return {
+      userCheck,
+      isHeadValue,
+      isSubmitValue,
+      scores,
+      hasSelfAssessed,
+      hasHeadAssessed,
     };
   }
 }

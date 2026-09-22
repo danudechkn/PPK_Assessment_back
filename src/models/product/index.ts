@@ -122,25 +122,25 @@ db.KpiScoreLevels.belongsTo(db.KpiIndicators, {
   as: "kpi_indicator",
 });
 
-db.ValueOrders.hasMany(db.KpiAssessmentValues, {
-  foreignKey: "value_order_id",
-  as: "kpi_assessment_values",
-});
+// db.ValueOrders.hasMany(db.KpiAssessmentValues, {
+//   foreignKey: "value_order_id",
+//   as: "kpi_assessment_values",
+// });
 
-db.KpiAssessmentValues.belongsTo(db.ValueOrders, {
-  foreignKey: "value_order_id",
-  as: "value_order",
-});
+// db.KpiAssessmentValues.belongsTo(db.ValueOrders, {
+//   foreignKey: "value_order_id",
+//   as: "value_order",
+// });
 
-db.KpiIndicators.hasMany(db.KpiAssessmentValues, {
-  foreignKey: "kpi_indicator_id",
-  as: "assessment_values",
-});
+// db.KpiIndicators.hasMany(db.KpiAssessmentValues, {
+//   foreignKey: "kpi_indicator_id",
+//   as: "assessment_values",
+// });
 
-db.KpiAssessmentValues.belongsTo(db.KpiIndicators, {
-  foreignKey: "kpi_indicator_id",
-  as: "kpi_indicator",
-});
+// db.KpiAssessmentValues.belongsTo(db.KpiIndicators, {
+//   foreignKey: "kpi_indicator_id",
+//   as: "kpi_indicator",
+// });
 
 // competency <-> positon level
 

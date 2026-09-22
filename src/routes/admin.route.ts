@@ -4,6 +4,8 @@ import AssessmentController from "../controller/assessmentcompetent.controller";
 import KpiController from "../controller/kpi.controller";
 import { ChoiceSetupController } from "../controller/choice-setup/chioiceSetup.controller";
 import { SetupFuncunitController } from "../controller/slot-setup-funcunit/setupFuncunit.controller";
+import { KpiSetUpController } from "../controller/kpi/kpiIndicatorsSetup.controller";
+import { KpiScoreLevelsController } from "../controller/kpi/kpiScoreLevels.controler";
 import {
   authenticateToken,
   authorizeRole,
@@ -51,7 +53,32 @@ router.post("/assessments", AssessmentController.createOrder); // สร้า�
 router.put("/assessments/:id", AssessmentController.updateOrder); // แก้ไขรอบการประเมิน
 router.delete("/assessments/:id", AssessmentController.deleteOrder); // ลบรอบการประเมินและข้อมูลคะแนน
 
-// --- KPI master data ---
+// --- KPI Indicator Setup (by nes) ---
+router.get("/kpi-indicators", KpiSetUpController.index);
+router.post("/kpi-indicators", KpiSetUpController.create);
+router.get("/kpi-indicators/:id", KpiSetUpController.show);
+router.put("/kpi-indicators/:id", KpiSetUpController.update);
+router.delete("/kpi-indicators/:id", KpiSetUpController.delete);
+
+// router.get("/kpi-setup", KpiSetUpController.index);
+// router.post("/kpi-setup", KpiSetUpController.create);
+// router.get("/kpi-setup/:id", KpiSetUpController.show);
+// router.put("/kpi-setup/:id", KpiSetUpController.update);
+// router.delete("/kpi-setup/:id", KpiSetUpController.delete);
+
+// --- KPI Score Levels Setup (by nes) ---
+router.get("/kpi-score-levels", KpiScoreLevelsController.index);
+router.get("/kpi-score-levels/get-kpi", KpiScoreLevelsController.getKpi);
+router.post("/kpi-score-levels", KpiScoreLevelsController.create);
+router.get(
+  "/kpi-score-levels/by-indicator/:indicatorId",
+  KpiScoreLevelsController.getByIndicator,
+);
+router.get("/kpi-score-levels/:id", KpiScoreLevelsController.show);
+router.put("/kpi-score-levels/:id", KpiScoreLevelsController.update);
+router.delete("/kpi-score-levels/:id", KpiScoreLevelsController.delete);
+
+// --- KPI master data (Legacy / fallback) ---
 router.get("/kpis", KpiController.getIndicators); // ดู KPI ทั้งหมด
 router.get("/kpis/:id", KpiController.getIndicatorById); // ดู KPI รายการเดียว
 router.post("/kpis", KpiController.createIndicator); // เพิ่ม KPI (รองรับ dataArray)

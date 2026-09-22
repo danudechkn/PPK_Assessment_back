@@ -17,6 +17,8 @@ class ValueOrders extends Model<
   declare round: number | null;
   declare year: number | null;
   declare status: string | null;
+  declare total_value: number | null;
+  declare type_order_id: number | null;
   declare createdAt: Date | null;
   declare updatedAt: Date | null;
 
@@ -52,6 +54,15 @@ ValueOrders.init(
       type: DataTypes.STRING(20),
       allowNull: true,
       defaultValue: "Y",
+    },
+    total_value: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: 0,
+    },
+    type_order_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
     },
     createdAt: {
       type: DataTypes.DATE,

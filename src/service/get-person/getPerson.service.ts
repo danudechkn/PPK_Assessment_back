@@ -1,6 +1,8 @@
 import { Op } from "sequelize";
 import dbppk from "../../models/ppkhosp-person";
 import dbuser from "../../models/centralusers";
+import dbproduct from "../../models/product";
+import { AssessmentHelper } from "../assessmentcompetent/helper/assessment.helper";
 export class getPersonService {
   static async headGetPersonByFuncUnit(userId: number, funcId: number) {
     try {
@@ -83,6 +85,7 @@ export class getPersonService {
           "OffID",
           "PosID",
           "FuncUnitID",
+          "StatusID",
         ],
         where: personWhereCondition,
         include: [
@@ -130,7 +133,41 @@ export class getPersonService {
         throw new Error("ไม่พบข้อมูลบุคลากรในกลุ่มงานนี้");
       }
       // -------------------------------------------------------------
-      // สเต็ป 5: Format ข้อมูลส่งกลับ
+      // สเต็ป 4.1: ดึงสถานะการประเมินของลูกน้องทุกคนในรอบปัจจุบัน (Batch Query)
+      // -------------------------------------------------------------
+      const { round, year } = AssessmentHelper.getCurrentRoundAndYear();
+
+      const targetUserIds = filteredPerson
+        .map((item: any) => item.Users?.[0]?.userid || item.Users?.[1]?.userid)
+        .filter(Boolean)
+        .map(Number);
+
+      const orders =
+        targetUserIds.length > 0
+          ? await dbproduct.ValueOrders.findAll({
+              where: {
+                user_id: { [Op.in]: targetUserIds },
+                round,
+                year,
+              },
+              include: [
+                {
+                  model: dbproduct.ValueData,
+                  as: "value_data_list",
+                },
+              ],
+            })
+          : [];
+
+      const orderMap = new Map<number, any>();
+      for (const order of orders) {
+        if (order.user_id) {
+          orderMap.set(Number(order.user_id), order);
+        }
+      }
+
+      // -------------------------------------------------------------
+      // สเต็ป 5: Format ข้อมูลส่งกลับพร้อม Status
       // -------------------------------------------------------------
       const formatPerson = filteredPerson.map((item: any, index: number) => {
         const doctor_name = item?.DoctorNameInfo
@@ -145,16 +182,49 @@ export class getPersonService {
         const person_name = [item.firstname, item.lastname]
           .filter(Boolean)
           .join(" ");
+
+        const targetUserId =
+          item.Users?.[0]?.userid || item.Users?.[1]?.userid || null;
+        const order = targetUserId ? orderMap.get(Number(targetUserId)) : null;
+
+        const valueList = order?.value_data_list || [];
+        const hasSelfAssessed = valueList.some(
+          (d: any) => d.user_value != null,
+        );
+        const hasHeadAssessed = valueList.some(
+          (d: any) => d.head_value != null,
+        );
+        const isAllSubmitted =
+          valueList.length > 0 &&
+          valueList.every((d: any) => d.submit_value != null);
+
+        let status = order?.status || "PENDING";
+        if (isAllSubmitted) {
+          status = "COMPLETED";
+          if (order?.id && order.status !== "COMPLETED") {
+            dbproduct.ValueOrders.update(
+              { status: "COMPLETED" },
+              { where: { id: order.id } },
+            ).catch(() => {});
+          }
+        }
+
         return {
           no: index + 1,
           id: item.id,
-          userid: item.Users?.[0]?.userid || item.Users?.[1]?.userid || null,
+          userid: targetUserId ? Number(targetUserId) : null,
           name: doctor_name || person_name,
           posName: item.Position?.Positionname || null,
           offName: item.OfficePerson?.offname || null,
           offID: item.OffID || null,
           funcunitName: item.FuncUnit?.FuncunitName || null,
           funcID: item.FuncUnitID || null,
+
+          // 🎯 ข้อมูลสถานะการประเมิน
+          orderId: order?.id || null,
+          status,
+          hasSelfAssessed,
+          hasHeadAssessed,
         };
       });
       return formatPerson;

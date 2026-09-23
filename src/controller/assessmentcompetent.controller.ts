@@ -166,7 +166,13 @@ class AssessmentController {
         ? Number(queryUserId)
         : Number(tokenUserId);
 
-      const result = await AssessmentService.checkSelfAssessment(targetUserId);
+      const queryTypeOrderId = req.query.type_order_id || req.query.typeOrderId;
+      const typeOrderId = queryTypeOrderId ? Number(queryTypeOrderId) : undefined;
+
+      const result = await AssessmentService.checkSelfAssessment(
+        targetUserId,
+        typeOrderId,
+      );
 
       res.status(200).json({ success: true, data: result });
     } catch (error: unknown) {

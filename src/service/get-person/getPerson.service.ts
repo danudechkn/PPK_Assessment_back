@@ -76,6 +76,8 @@ export class getPersonService {
             ? [{ id: { [Op.in]: slotInPersonIds } }]
             : []),
         ],
+        StatusID: { [Op.in]: [1, 2, 10] },
+        id: { [Op.ne]: 900002 },
       };
       const person = await dbppk.AppPerson.findAll({
         attributes: [

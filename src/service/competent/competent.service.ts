@@ -132,6 +132,7 @@ class CompetentService {
         "competency_category_id",
         "competency",
         "expected_score",
+        "weight",
       ],
       include: [
         {
@@ -155,6 +156,7 @@ class CompetentService {
           id: number;
           competency: string;
           expected_score: number;
+          weight: number;
         }>;
       }
     >();
@@ -172,6 +174,7 @@ class CompetentService {
         id: item.id,
         competency: item.competency,
         expected_score: item.expected_score,
+        weight: item.weight,
       });
     }
     // 3. แปลงผลลัพธ์จาก Map เป็น Array ส่งกลับ

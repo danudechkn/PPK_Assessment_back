@@ -19,11 +19,33 @@ class AssessmentService {
 
   /**
    * ตรวจสอบสถานะการประเมินตนเองและคะแนนภาพรวมของผู้ใช้ในรอบ/ปีปัจจุบัน
+   * รองรับทั้งการระบุ typeOrderId เจาะจง (1 = KPI, 2 = Competency) หรือดึงทั้งสองประเภทพร้อมกัน
    */
-  static async checkSelfAssessment(userId: number) {
+  static async checkSelfAssessment(userId: number, typeOrderId?: number) {
     const { round, year } = AssessmentHelper.getCurrentRoundAndYear();
 
-    const data = await db.ValueOrders.findOne({
+    if (typeOrderId) {
+      const data = await db.ValueOrders.findOne({
+        where: { user_id: userId, round, year, type_order_id: typeOrderId },
+        include: [
+          {
+            model: db.ValueData,
+            as: "value_data_list",
+          },
+        ],
+      });
+
+      return this.calculateAssessmentSummary(
+        data,
+        userId,
+        round,
+        year,
+        typeOrderId,
+      );
+    }
+
+    // กรณีไม่ระบุ typeOrderId ให้ค้นหา orders ทั้งหมดของผู้ใช้ในรอบ/ปีนี้
+    const allOrders = await db.ValueOrders.findAll({
       where: { user_id: userId, round, year },
       include: [
         {
@@ -31,9 +53,56 @@ class AssessmentService {
           as: "value_data_list",
         },
       ],
+      order: [["type_order_id", "ASC"]],
     });
 
-    return this.calculateAssessmentSummary(data, userId, round, year);
+    const kpiOrder =
+      allOrders.find((o: any) => Number(o.type_order_id) === 1) || null;
+    const competencyOrder =
+      allOrders.find((o: any) => Number(o.type_order_id) === 2) || null;
+
+    const kpiSummary = this.calculateAssessmentSummary(
+      kpiOrder,
+      userId,
+      round,
+      year,
+      1,
+    );
+    const competencySummary = this.calculateAssessmentSummary(
+      competencyOrder,
+      userId,
+      round,
+      year,
+      2,
+    );
+
+    const hasSelfAssessed =
+      kpiSummary.hasSelfAssessed || competencySummary.hasSelfAssessed;
+    const hasHeadAssessed =
+      kpiSummary.hasHeadAssessed || competencySummary.hasHeadAssessed;
+
+    return {
+      // 1. แยกตาม Key เพื่อให้เรียกใช้ง่าย
+      kpi: kpiSummary,
+      competency: competencySummary,
+
+      // 2. โครงสร้างแบบ Array items ตรงกับตอนบันทึก (type_order_id 1 และ 2)
+      item: [
+        { ...kpiSummary, type_order_id: 1 },
+        { ...competencySummary, type_order_id: 2 },
+      ],
+
+      // 3. Dictionary สำหรับเข้าถึงด้วยรหัสประเภท: by_type[1], by_type[2]
+      by_type: {
+        1: kpiSummary,
+        2: competencySummary,
+      },
+
+      // 4. Backward Compatibility เพื่อให้โค้ดหน้าบ้านเดิมที่ดึง competency ไม่พัง
+      ...competencySummary,
+      hasSelfAssessed,
+      hasHeadAssessed,
+    };
   }
 
   // =================================================================
@@ -651,9 +720,12 @@ class AssessmentService {
 
     for (const { quest, scores } of validatedItems) {
       if (typeOrderId === 1) {
-        const indicator = await db.KpiIndicators.findByPk(quest, { transaction });
-        if (!indicator) {
-          throw new ApiError(`KPI indicator ${quest} not found`, 404);
+        const scoreLevel = await db.KpiScoreLevels.findByPk(quest, { transaction });
+        if (!scoreLevel) {
+          const indicator = await db.KpiIndicators.findByPk(quest, { transaction });
+          if (!indicator) {
+            throw new ApiError(`KPI item ${quest} not found`, 404);
+          }
         }
       } else {
         const competency = await db.Competencies.findByPk(quest, { transaction });
@@ -726,31 +798,34 @@ class AssessmentService {
       nextStatus = "HEAD_SUBMITTED";
     }
 
-    // 🎯 2. คำนวณคะแนนรวม total_value
-    let computedTotal: number | null = null;
+    // 🎯 2. คำนวณคะแนนรวม total_value ตาม type_order_id
+    let totalWeightedScore = 0;
+    let totalWeight = 0;
     const currentTypeId = typeOrderId ?? order.type_order_id ?? 2;
 
     if (currentTypeId === 1) {
       // 🟢 Type 1 = KPI
       const scoreLevels = await db.KpiScoreLevels.findAll({
-        attributes: ["kpi_indicator_id", "score", "weight"],
+        attributes: ["id", "kpi_indicator_id", "weight"],
         transaction,
       });
 
-      let sumWeighted = 0;
+      const weightMap = new Map<number, number>(
+        scoreLevels.map((lvl: any) => [Number(lvl.id), Number(lvl.weight || 0)]),
+      );
+
+      const defaultWeight = allValues.length > 0 ? 100 / allValues.length : 20;
+
       for (const val of allValues) {
         const score = val.submit_value ?? val.head_value ?? val.user_value;
         if (score != null) {
-          const matched = scoreLevels.find(
-            (lvl: any) =>
-              Number(lvl.kpi_indicator_id) === Number(val.quest) &&
-              Number(lvl.score) === Number(score),
-          );
-          const weight = matched ? Number(matched.weight || 0) : 0;
-          sumWeighted += (Number(score) * weight) / 100;
+          const kpiW = weightMap.get(Number(val.quest));
+          const rawW = kpiW !== undefined && kpiW > 0 ? kpiW : defaultWeight;
+
+          totalWeightedScore += Number(score) * rawW;
+          totalWeight += rawW;
         }
       }
-      computedTotal = Number((sumWeighted * 20).toFixed(2));
     } else {
       // 🟢 Type 2 = Competency
       const competencies = await db.Competencies.findAll({
@@ -758,19 +833,26 @@ class AssessmentService {
         transaction,
       });
       const weightMap = new Map<number, number>(
-        competencies.map((c: any) => [Number(c.id), Number(c.weight || 1)]),
+        competencies.map((c: any) => [Number(c.id), Number(c.weight || 0)]),
       );
 
-      let sumTotal = 0;
+      const defaultWeight = allValues.length > 0 ? 100 / allValues.length : 10;
+
       for (const val of allValues) {
         const score = val.submit_value ?? val.head_value ?? val.user_value;
         if (score != null) {
-          const w = weightMap.get(Number(val.quest)) ?? 1;
-          sumTotal += Number(score) * w;
+          const compW = weightMap.get(Number(val.quest));
+          const rawW = compW != null && compW > 0 ? compW : defaultWeight;
+
+          totalWeightedScore += Number(score) * rawW;
+          totalWeight += rawW;
         }
       }
-      computedTotal = Number(sumTotal.toFixed(2));
     }
+
+    // คิดฐาน 100 คะแนน: (คะแนนเฉลี่ยถ่วงน้ำหนัก x 20)
+    const avgC = totalWeight > 0 ? totalWeightedScore / totalWeight : 0;
+    const computedTotal = Number((avgC * 20).toFixed(2));
 
     const updates: any = {};
     if (order.status !== nextStatus) {
@@ -815,6 +897,7 @@ class AssessmentService {
     userId: number,
     round: number,
     year: number,
+    typeOrderId?: number,
   ) {
     const valueList = data?.value_data_list || [];
 
@@ -863,6 +946,7 @@ class AssessmentService {
 
     const scores = valueList.map((item: any) => ({
       quest: item.quest,
+      score: item.score ?? item.user_value,
       user_value: item.user_value,
       head_value: item.head_value,
       submit_value: item.submit_value,
@@ -873,12 +957,17 @@ class AssessmentService {
       0,
     );
 
+    const resolvedTypeOrderId =
+      data?.type_order_id ?? typeOrderId ?? null;
+
     const userCheck = {
       id: data?.id ?? null,
       user_id: data?.user_id ?? userId,
       head_id: data?.head_id ?? null,
       round: data?.round ?? round,
       year: data?.year ?? year,
+      type_order_id: resolvedTypeOrderId,
+      total_value: data?.total_value ?? 0,
       status,
       createdAt: data?.createdAt ?? null,
       total_score: isAllSubmitted ? totalSubmitScore : totalUserScore,
@@ -890,10 +979,13 @@ class AssessmentService {
     };
 
     return {
+      type_order_id: resolvedTypeOrderId,
+      orderId: data?.id ?? null,
       userCheck,
       isHeadValue,
       isSubmitValue,
       scores,
+      value: scores,
       hasSelfAssessed,
       hasHeadAssessed,
     };

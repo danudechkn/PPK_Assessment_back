@@ -9,6 +9,7 @@ import CompetentController from "../controller/competent.controller";
 import { GetPersonController } from "../controller/get-person/getPerson.controller";
 import { KpiSetUpController } from "../controller/kpi/kpiIndicatorsSetup.controller";
 import { KpiScoreLevelsController } from "../controller/kpi/kpiScoreLevels.controler";
+import { SignatureController } from "../controller/signature/signature.controller";
 
 const router = Router();
 
@@ -67,5 +68,9 @@ router.get("/kpi-levels", KpiController.getScoreLevels); // ดูระดั�
 router.get("/kpi-assessments/:orderId", KpiController.getUserAssessmentValues); // ID รอบประเมิน; ส่ง { value_order, kpi_assessments }
 router.put("/kpi-assessments/:id", KpiController.updateAssessmentValueScores); // ID รายการผล KPI; บันทึก actual_value, user_value หรือ head_value
 router.put("/kpi-assessments/:id/submit", KpiController.submitAssessmentValue); // ID รายการผล KPI; ยืนยันคะแนนและคำนวณคะแนนถ่วงน้ำหนัก
+
+// signature
+router.get("/signature", SignatureController.getSignatureByUserid);
+router.post("/upsert-signature", SignatureController.upsertSignature);
 
 export default router;

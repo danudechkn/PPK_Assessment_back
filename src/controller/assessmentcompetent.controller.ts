@@ -114,6 +114,9 @@ class AssessmentController {
         userId: targetUserId,
         headId: req.body?.head_id || currentUserId,
         mode,
+        development_plans: req.body?.development_plans,
+        signature: req.body?.signature,
+        clientIp: req.ip || req.socket.remoteAddress,
       });
       res.status(200).json({ success: true, data: result });
     } catch (error: unknown) {

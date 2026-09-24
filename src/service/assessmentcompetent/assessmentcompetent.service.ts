@@ -187,7 +187,17 @@ class AssessmentService {
     headIdInput?: number,
     modeInput?: AssessmentMode | string,
   ) {
-    const { orderId, items, itemGroup, userId, headId, mode } = this.parseSaveParams(
+    const {
+      orderId,
+      items,
+      itemGroup,
+      userId,
+      headId,
+      mode,
+      development_plans,
+      signature,
+      clientIp,
+    } = this.parseSaveParams(
       paramsOrOrderId,
       itemsInput,
       userIdInput,
@@ -213,6 +223,9 @@ class AssessmentService {
           item: itemGroup,
           userId,
           headId,
+          development_plans,
+          signature,
+          clientIp,
         });
 
       case "SELF":
@@ -268,6 +281,8 @@ class AssessmentService {
 
   /**
    * บันทึกคะแนนข้อตกลงร่วมกัน (Agreement Assessment)
+   * คำนวณสรุปผลคะแนน KPI, Competency และเกณฑ์ลงใน assessment_summaries โดยอัตโนมัติที่ Backend
+   * พร้อมบันทึกแผนพัฒนาตนเอง (assessment_development_plans) และลายเซ็น (assessment_signatures)
    */
   static async saveAgreementScores({
     orderId,
@@ -275,8 +290,12 @@ class AssessmentService {
     item,
     userId,
     headId,
+    development_plans,
+    signature,
+    clientIp,
   }: SaveAgreementScoresParams) {
-    return this.persistScores({
+    // 1. บันทึกคะแนนลง ValueOrders & ValueData (KPI + Competency)
+    const scoreResults = await this.persistScores({
       orderIdInput: orderId,
       items,
       multiTypeItems: item,
@@ -285,6 +304,124 @@ class AssessmentService {
       isHead: true,
       mode: "AGREEMENT",
     });
+
+    const targetUserId = AssessmentHelper.parsePositiveId(userId, "userId");
+    const targetHeadId = headId ? Number(headId) : 0;
+    const { round, year } = AssessmentHelper.getCurrentRoundAndYear();
+
+    await db.sequelize.transaction(async (transaction: any) => {
+      // 2. ดึงคะแนน ValueOrders ทั้ง KPI (type 1) และ Competency (type 2) เพื่อคำนวณอัตโนมัติ
+      const orders = await db.ValueOrders.findAll({
+        where: { user_id: targetUserId, round, year },
+        transaction,
+      });
+
+      const kpiOrder = orders.find((o: any) => Number(o.type_order_id) === 1);
+      const competencyOrder = orders.find((o: any) => Number(o.type_order_id) === 2);
+
+      const kpiScore = kpiOrder ? Number(kpiOrder.total_value || 0) : 0;
+      const competencyScore = competencyOrder
+        ? Number(competencyOrder.total_value || 0)
+        : 0;
+
+      const kpiWeight = 70.0;
+      const competencyWeight = 30.0;
+
+      const kpiWeightedScore = Number((kpiScore * (kpiWeight / 100)).toFixed(2));
+      const competencyWeightedScore = Number(
+        (competencyScore * (competencyWeight / 100)).toFixed(2),
+      );
+      const totalScore = Number(
+        (kpiWeightedScore + competencyWeightedScore).toFixed(2),
+      );
+
+      // คำนวณเกณฑ์ระดับคะแนน (grade_level: 1 = ดีเด่น, 2 = ดีมาก, 3 = ดี, 4 = พอใช้, 5 = ต้องปรับปรุง)
+      let gradeLevel = 5;
+      if (totalScore >= 90) gradeLevel = 1;
+      else if (totalScore >= 80) gradeLevel = 2;
+      else if (totalScore >= 70) gradeLevel = 3;
+      else if (totalScore >= 60) gradeLevel = 4;
+
+      // 3. บันทึก/อัปเดตลงตาราง assessment_summaries โดยอัตโนมัติที่ Backend
+      let summaryRecord = await db.AssessmentSummaries.findOne({
+        where: { user_id: targetUserId, round, year },
+        transaction,
+      });
+
+      const summaryData = {
+        user_id: targetUserId,
+        head_id: targetHeadId || (summaryRecord ? summaryRecord.head_id : 0),
+        round,
+        year,
+        kpi_score: kpiScore,
+        kpi_weight: kpiWeight,
+        kpi_weighted_score: kpiWeightedScore,
+        competency_score: competencyScore,
+        competency_weight: competencyWeight,
+        competency_weighted_score: competencyWeightedScore,
+        total_score: totalScore,
+        grade_level: gradeLevel,
+        evaluator_status: 2,
+        status: 3,
+      };
+
+      if (summaryRecord) {
+        await summaryRecord.update(summaryData, { transaction });
+      } else {
+        summaryRecord = await db.AssessmentSummaries.create(summaryData, {
+          transaction,
+        });
+      }
+
+      const summaryId = summaryRecord.id;
+
+      // 4. บันทึกลงตาราง assessment_development_plans (ลบของเดิมที่มี แล้วบันทึกรายการใหม่จาก Array)
+      if (Array.isArray(development_plans) && development_plans.length > 0) {
+        await db.AssessmentDevelopmentPlans.destroy({
+          where: { summary_id: summaryId },
+          transaction,
+        });
+
+        const plansToInsert = (development_plans as any[]).map(
+          (plan: any, idx: number) => ({
+            summary_id: summaryId,
+            need_development: plan.need_development || "",
+            development_method: plan.development_method || "",
+            development_period: plan.development_period || "",
+            sort_order: String(plan.sort_order || idx + 1),
+          }),
+        );
+
+        await db.AssessmentDevelopmentPlans.bulkCreate(plansToInsert, {
+          transaction,
+        });
+      }
+
+      // 5. บันทึกลงตาราง assessment_signatures (signed_at สร้างอัตโนมัติที่ Backend ด้วย new Date())
+      if (signature) {
+        const sigObj = signature as any;
+        const signatureId = sigObj.signature_id || sigObj.id;
+
+        if (signatureId) {
+          await db.AssessmentSignatures.create(
+            {
+              summary_id: summaryId,
+              signer_id: sigObj.signer_id || targetHeadId || targetUserId,
+              signer_type_id: sigObj.signer_type_id || 2, // 2 = หัวหน้า/ผู้ประเมิน
+              signer_name: sigObj.signer_name || "",
+              signer_position: sigObj.signer_position || null,
+              signature_id: signatureId,
+              comment: sigObj.comment || null,
+              signed_at: new Date(), // 💡 Auto-generated at Backend!
+              ip_address: sigObj.ip_address || clientIp || "127.0.0.1",
+            },
+            { transaction },
+          );
+        }
+      }
+    });
+
+    return scoreResults;
   }
 
   /**
@@ -463,6 +600,9 @@ class AssessmentService {
     let headId: number | undefined;
     let rawMode: unknown;
     let isHead = false;
+    let development_plans: unknown;
+    let signature: unknown;
+    let clientIp: string | undefined;
 
     if (
       paramsOrOrderId &&
@@ -476,6 +616,9 @@ class AssessmentService {
       headId = opts.headId;
       rawMode = opts.mode;
       isHead = opts.isHead === true;
+      development_plans = opts.development_plans;
+      signature = opts.signature;
+      clientIp = opts.clientIp;
     } else {
       orderId = paramsOrOrderId;
       items = itemsInput;
@@ -494,7 +637,17 @@ class AssessmentService {
         ? "AGREEMENT"
         : "SELF";
 
-    return { orderId, items, itemGroup, userId, headId, mode };
+    return {
+      orderId,
+      items,
+      itemGroup,
+      userId,
+      headId,
+      mode,
+      development_plans,
+      signature,
+      clientIp,
+    };
   }
 
   /**
@@ -543,7 +696,7 @@ class AssessmentService {
             typeOrderId,
           });
 
-          if (order && order.status === "COMPLETED") {
+          if (order && order.status === "COMPLETED" && mode !== "AGREEMENT") {
             throw new ApiError(
               `Assessment order (type ${typeOrderId}) has already been completed and cannot be changed`,
               409,
@@ -591,7 +744,7 @@ class AssessmentService {
         typeOrderId: defaultTypeOrderId,
       });
 
-      if (order && order.status === "COMPLETED") {
+      if (order && order.status === "COMPLETED" && mode !== "AGREEMENT") {
         throw new ApiError(
           "This competency assessment has already been completed and cannot be changed",
           409,

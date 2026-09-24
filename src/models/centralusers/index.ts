@@ -71,6 +71,27 @@ Object.keys(db).forEach((modelName) => {
   }
 });
 
+// signature;
+// UserSign.js
+db.UserSign.hasOne(db.UserSignData, {
+  foreignKey: "id",
+  as: "SignData",
+});
+
+// UserSignData.js
+db.UserSignData.belongsTo(db.UserSign, {
+  foreignKey: "id",
+});
+
+db.DoctorImage.hasOne(db.DoctorImageData, {
+  foreignKey: "id",
+  as: "DoctorSignData",
+});
+
+db.DoctorImageData.belongsTo(db.DoctorImage, {
+  foreignKey: "id",
+});
+
 // 5. ส่งออกระบบไปใช้ร่วมกัน
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;

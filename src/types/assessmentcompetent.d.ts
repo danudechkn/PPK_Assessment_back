@@ -20,6 +20,25 @@ export interface TypeOrderItemPayload {
   value: ScoreItemPayload[];
 }
 
+export interface DevelopmentPlanPayload {
+  need_development: string;
+  development_method: string;
+  development_period: string;
+  sort_order?: string;
+}
+
+export interface SignaturePayload {
+  signer_id?: number;
+  signer_type_id?: number;
+  signer_name?: string;
+  signer_position?: string;
+  signature_id?: number;
+  id?: number;
+  comment?: string;
+  signed_at?: Date | string;
+  ip_address?: string;
+}
+
 export interface SaveScoresParams {
   orderId?: unknown;
   items?: unknown;
@@ -28,6 +47,9 @@ export interface SaveScoresParams {
   headId?: number;
   mode?: AssessmentMode | string;
   isHead?: boolean;
+  development_plans?: DevelopmentPlanPayload[] | unknown;
+  signature?: SignaturePayload | unknown;
+  clientIp?: string;
 }
 
 export interface SaveSelfScoresParams {
@@ -51,4 +73,7 @@ export interface SaveAgreementScoresParams {
   item?: unknown;
   userId?: unknown;
   headId?: number;
+  development_plans?: DevelopmentPlanPayload[] | unknown;
+  signature?: SignaturePayload | unknown;
+  clientIp?: string;
 }

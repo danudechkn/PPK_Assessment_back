@@ -1,7 +1,9 @@
 import { Op } from "sequelize";
 import db from "../../models/product";
+import dbuser from "../../models/centralusers";
 import { ApiError } from "../../utils/api-response.util";
 import { parseScore } from "../../utils/score.util";
+import { bufferToSign } from "../../utils/sign-buffer.util";
 import { AssessmentHelper } from "./helper/assessment.helper";
 import {
   AssessmentMode,
@@ -18,11 +20,151 @@ class AssessmentService {
   // =================================================================
 
   /**
+   * ดึง Data URL (Base64) ของลายเซ็นตาม signature_id
+   */
+  private static async getSignatureUrlById(signatureId: number) {
+    if (!signatureId) return null;
+
+    const userSignData = await dbuser.UserSignData.findByPk(signatureId);
+    if (userSignData?.signature) {
+      return bufferToSign(userSignData.signature);
+    }
+
+    const doctorSignData = await dbuser.DoctorImageData.findByPk(signatureId);
+    if (doctorSignData?.signature) {
+      return bufferToSign(doctorSignData.signature);
+    }
+
+    return null;
+  }
+
+  /**
    * ตรวจสอบสถานะการประเมินตนเองและคะแนนภาพรวมของผู้ใช้ในรอบ/ปีปัจจุบัน
    * รองรับทั้งการระบุ typeOrderId เจาะจง (1 = KPI, 2 = Competency) หรือดึงทั้งสองประเภทพร้อมกัน
    */
-  static async checkSelfAssessment(userId: number, typeOrderId?: number) {
+  static async checkSelfAssessment(
+    userId: number,
+    typeOrderId?: number,
+    typeId?: number,
+    doctorId?: number,
+  ) {
     const { round, year } = AssessmentHelper.getCurrentRoundAndYear();
+
+    // 1. ดึงข้อมูลสรุปผลการประเมิน แผนพัฒนาตนเอง และรายการลายเซ็นที่ลงในใบประเมิน
+    const summaryRecord = await db.AssessmentSummaries.findOne({
+      where: {
+        [db.Sequelize.Op.or]: [
+          { user_id: userId, year, round },
+          { head_id: userId, year, round },
+        ],
+      },
+      attributes: [
+        "id",
+        "user_id",
+        "head_id",
+        "round",
+        "year",
+        "kpi_score",
+        "kpi_weight",
+        "kpi_weighted_score",
+        "competency_score",
+        "competency_weight",
+        "competency_weighted_score",
+        "total_score",
+        "grade_level",
+        "evaluator_status",
+        "status",
+        "createdAt",
+      ],
+      include: [
+        {
+          model: db.AssessmentDevelopmentPlans,
+          as: "development_plans",
+          attributes: [
+            "id",
+            "summary_id",
+            "need_development",
+            "development_method",
+            "development_period",
+            "sort_order",
+          ],
+        },
+        {
+          model: db.AssessmentSignatures,
+          as: "assessment_signatures",
+          attributes: [
+            "id",
+            "summary_id",
+            "signer_id",
+            "signer_type_id",
+            "signer_name",
+            "signer_position",
+            "signature_id",
+            "signed_at",
+          ],
+        },
+      ],
+      order: [
+        ["id", "DESC"],
+        [
+          { model: db.AssessmentDevelopmentPlans, as: "development_plans" },
+          "sort_order",
+          "ASC",
+        ],
+      ],
+    });
+
+    // 2. แปลงผลลัพธ์ summaryRecord และดึงรูปภาพ Base64 ของลายเซ็นแต่ละคนที่ลงชื่อในใบประเมิน
+    let summaryList: any = null;
+    let userSignatureUrl: string | null = null;
+    let headSignatureUrl: string | null = null;
+
+    if (summaryRecord) {
+      const plainSummary = summaryRecord.get({ plain: true });
+
+      const formattedSignatures = await Promise.all(
+        (plainSummary.assessment_signatures || []).map(async (sig: any) => {
+          const signatureUrl = await this.getSignatureUrlById(sig.signature_id);
+
+          // แยกไว้เผื่อเรียกใช้อัจฉริยะ (signer_type_id: 1 = ผู้รับการประเมิน, 2 = ผู้ประเมิน/หัวหน้า)
+          if (sig.signer_type_id === 1) userSignatureUrl = signatureUrl;
+          if (sig.signer_type_id === 2) headSignatureUrl = signatureUrl;
+
+          return {
+            ...sig,
+            signature_url: signatureUrl, // 👈 แนบ Base64 Data URL ของลายเซ็นออกมา!
+          };
+        }),
+      );
+
+      summaryList = {
+        ...plainSummary,
+        assessment_signatures: formattedSignatures,
+      };
+    }
+
+    // 3. ดึงลายเซ็นโปรไฟล์ส่วนตัวของผู้ใช้ปัจจุบันที่ล็อกอินอยู่
+    let mySignatureRecord: any = null;
+    if ([3, 4].includes(typeId || 0)) {
+      mySignatureRecord = await dbuser.UserSign.findOne({
+        where: { userid: userId, flag_cancel: "N" },
+        include: [{ model: dbuser.UserSignData, as: "SignData" }],
+      });
+    } else if (typeId === 5) {
+      const whereCondition: any = { userid: userId, flag_cancel: "N" };
+      if (doctorId) whereCondition.doctorid = doctorId;
+
+      mySignatureRecord = await dbuser.DoctorImage.findOne({
+        where: whereCondition,
+        include: [{ model: dbuser.DoctorImageData, as: "DoctorSignData" }],
+      });
+    }
+
+    const mySignatureUrl = bufferToSign(
+      mySignatureRecord?.SignData?.signature ||
+        mySignatureRecord?.DoctorSignData?.signature ||
+        null,
+    );
 
     if (typeOrderId) {
       const data = await db.ValueOrders.findOne({
@@ -35,13 +177,22 @@ class AssessmentService {
         ],
       });
 
-      return this.calculateAssessmentSummary(
+      const summaryResult = this.calculateAssessmentSummary(
         data,
         userId,
         round,
         year,
         typeOrderId,
       );
+
+      return {
+        ...summaryResult,
+        summaryList: summaryList || null,
+        summary_data: summaryList || null,
+        my_signature: mySignatureUrl,
+        user_signature: userSignatureUrl,
+        head_signature: headSignatureUrl,
+      };
     }
 
     // กรณีไม่ระบุ typeOrderId ให้ค้นหา orders ทั้งหมดของผู้ใช้ในรอบ/ปีนี้
@@ -82,6 +233,13 @@ class AssessmentService {
       kpiSummary.hasHeadAssessed || competencySummary.hasHeadAssessed;
 
     return {
+      // 🟢 ข้อมูลสรุปผลการประเมิน แผนพัฒนา และลายเซ็นของแต่ละคน
+      summaryList: summaryList || null,
+      summary_data: summaryList || null,
+      my_signature: mySignatureUrl,
+      user_signature: userSignatureUrl,
+      head_signature: headSignatureUrl,
+
       // 1. แยกตาม Key เพื่อให้เรียกใช้ง่าย
       kpi: kpiSummary,
       competency: competencySummary,
@@ -317,7 +475,9 @@ class AssessmentService {
       });
 
       const kpiOrder = orders.find((o: any) => Number(o.type_order_id) === 1);
-      const competencyOrder = orders.find((o: any) => Number(o.type_order_id) === 2);
+      const competencyOrder = orders.find(
+        (o: any) => Number(o.type_order_id) === 2,
+      );
 
       const kpiScore = kpiOrder ? Number(kpiOrder.total_value || 0) : 0;
       const competencyScore = competencyOrder
@@ -327,7 +487,9 @@ class AssessmentService {
       const kpiWeight = 70.0;
       const competencyWeight = 30.0;
 
-      const kpiWeightedScore = Number((kpiScore * (kpiWeight / 100)).toFixed(2));
+      const kpiWeightedScore = Number(
+        (kpiScore * (kpiWeight / 100)).toFixed(2),
+      );
       const competencyWeightedScore = Number(
         (competencyScore * (competencyWeight / 100)).toFixed(2),
       );
@@ -604,10 +766,7 @@ class AssessmentService {
     let signature: unknown;
     let clientIp: string | undefined;
 
-    if (
-      paramsOrOrderId &&
-      typeof paramsOrOrderId === "object"
-    ) {
+    if (paramsOrOrderId && typeof paramsOrOrderId === "object") {
       const opts = paramsOrOrderId as SaveScoresParams;
       orderId = opts.orderId;
       items = opts.items;
@@ -634,8 +793,8 @@ class AssessmentService {
       isHead || normalizedMode === "HEAD"
         ? "HEAD"
         : normalizedMode === "AGREEMENT"
-        ? "AGREEMENT"
-        : "SELF";
+          ? "AGREEMENT"
+          : "SELF";
 
     return {
       orderId,
@@ -675,7 +834,9 @@ class AssessmentService {
     const isMultiType =
       Array.isArray(multiTypeItems) &&
       multiTypeItems.length > 0 &&
-      multiTypeItems.some((g: any) => g && ("type_order_id" in g || "value" in g));
+      multiTypeItems.some(
+        (g: any) => g && ("type_order_id" in g || "value" in g),
+      );
 
     return db.sequelize.transaction(async (transaction: any) => {
       if (isMultiType) {
@@ -684,7 +845,8 @@ class AssessmentService {
         for (const group of multiTypeItems as any[]) {
           const typeOrderId = Number(group.type_order_id) || 2;
           const rawGroupItems = group.value ?? group.items ?? [];
-          const validatedItems = AssessmentHelper.parseScoreItems(rawGroupItems);
+          const validatedItems =
+            AssessmentHelper.parseScoreItems(rawGroupItems);
 
           // 1. ค้นหาหรือสร้าง Order ตาม type_order_id
           const order = await this.resolveOrderForScores({
@@ -873,15 +1035,21 @@ class AssessmentService {
 
     for (const { quest, scores } of validatedItems) {
       if (typeOrderId === 1) {
-        const scoreLevel = await db.KpiScoreLevels.findByPk(quest, { transaction });
+        const scoreLevel = await db.KpiScoreLevels.findByPk(quest, {
+          transaction,
+        });
         if (!scoreLevel) {
-          const indicator = await db.KpiIndicators.findByPk(quest, { transaction });
+          const indicator = await db.KpiIndicators.findByPk(quest, {
+            transaction,
+          });
           if (!indicator) {
             throw new ApiError(`KPI item ${quest} not found`, 404);
           }
         }
       } else {
-        const competency = await db.Competencies.findByPk(quest, { transaction });
+        const competency = await db.Competencies.findByPk(quest, {
+          transaction,
+        });
         if (!competency) {
           throw new ApiError(`Competency ${quest} not found`, 404);
         }
@@ -937,8 +1105,12 @@ class AssessmentService {
     const isAllSubmitted = allValues.every(
       (item: any) => item.submit_value != null,
     );
-    const hasUserValues = allValues.some((item: any) => item.user_value != null);
-    const hasHeadValues = allValues.some((item: any) => item.head_value != null);
+    const hasUserValues = allValues.some(
+      (item: any) => item.user_value != null,
+    );
+    const hasHeadValues = allValues.some(
+      (item: any) => item.head_value != null,
+    );
 
     let nextStatus: AssessmentStatus = "PENDING";
     if (isAllSubmitted) {
@@ -964,7 +1136,10 @@ class AssessmentService {
       });
 
       const weightMap = new Map<number, number>(
-        scoreLevels.map((lvl: any) => [Number(lvl.id), Number(lvl.weight || 0)]),
+        scoreLevels.map((lvl: any) => [
+          Number(lvl.id),
+          Number(lvl.weight || 0),
+        ]),
       );
 
       const defaultWeight = allValues.length > 0 ? 100 / allValues.length : 20;
@@ -1110,8 +1285,7 @@ class AssessmentService {
       0,
     );
 
-    const resolvedTypeOrderId =
-      data?.type_order_id ?? typeOrderId ?? null;
+    const resolvedTypeOrderId = data?.type_order_id ?? typeOrderId ?? null;
 
     const userCheck = {
       id: data?.id ?? null,

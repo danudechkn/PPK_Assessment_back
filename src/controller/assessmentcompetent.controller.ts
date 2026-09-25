@@ -97,8 +97,8 @@ class AssessmentController {
       const mode: AssessmentMode = isHead
         ? "HEAD"
         : rawMode === "AGREEMENT"
-        ? "AGREEMENT"
-        : "SELF";
+          ? "AGREEMENT"
+          : "SELF";
 
       // ถ้าเป็น HEAD หรือ AGREEMENT: userId คือเป้าหมายลูกน้องที่ถูกประเมิน (จาก body)
       // ถ้าเป็น SELF: userId คือตนเอง (จาก token)
@@ -160,7 +160,9 @@ class AssessmentController {
   static async checkSelfAssessment(req: Request, res: Response) {
     try {
       const authUser = (req as AuthenticatedRequest).user;
-      const tokenUserId = authUser?.userid || authUser?.id;
+      const tokenUserId = Number(authUser?.userid);
+      const tokenTypeId = Number(authUser?.type_id);
+      const tokenDoctorId = Number(authUser?.doctorid);
 
       // 💡 ถ้าส่ง query ?userId=... มา (หัวหน้าตรวจสอบลูกน้อง) ให้ใช้ ID ลูกน้อง
       // ถ้าไม่ได้ส่ง query มา (พนักงานตรวจสอบตัวเอง) ให้ใช้ ID จาก token
@@ -170,11 +172,15 @@ class AssessmentController {
         : Number(tokenUserId);
 
       const queryTypeOrderId = req.query.type_order_id || req.query.typeOrderId;
-      const typeOrderId = queryTypeOrderId ? Number(queryTypeOrderId) : undefined;
+      const typeOrderId = queryTypeOrderId
+        ? Number(queryTypeOrderId)
+        : undefined;
 
       const result = await AssessmentService.checkSelfAssessment(
         targetUserId,
         typeOrderId,
+        tokenTypeId,
+        tokenDoctorId,
       );
 
       res.status(200).json({ success: true, data: result });

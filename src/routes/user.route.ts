@@ -10,10 +10,14 @@ import { GetPersonController } from "../controller/get-person/getPerson.controll
 import { KpiSetUpController } from "../controller/kpi/kpiIndicatorsSetup.controller";
 import { KpiScoreLevelsController } from "../controller/kpi/kpiScoreLevels.controler";
 import { SignatureController } from "../controller/signature/signature.controller";
+import { DashboardPersonController } from "../controller/dashboard/dashboardPerson.controller";
 
 const router = Router();
 
 router.use(authenticateToken, authorizeRole(1, 2));
+
+// dashboard person
+router.get("/dashboard/person", DashboardPersonController.getDashboardPerson);
 
 // updata by nes
 router.get(
@@ -72,5 +76,8 @@ router.put("/kpi-assessments/:id/submit", KpiController.submitAssessmentValue); 
 // signature
 router.get("/signature", SignatureController.getSignatureByUserid);
 router.post("/upsert-signature", SignatureController.upsertSignature);
+
+// dasboard
+router.get("/person-dashboard", DashboardPersonController.getDashboardPerson);
 
 export default router;

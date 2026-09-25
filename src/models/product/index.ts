@@ -154,6 +154,30 @@ db.PositionLevel.hasMany(db.Competencies, {
   as: "competencies",
 });
 
+// summary <-> development
+
+db.AssessmentSummaries.hasMany(db.AssessmentDevelopmentPlans, {
+  foreignKey: "summary_id",
+  as: "development_plans",
+});
+
+db.AssessmentDevelopmentPlans.belongsTo(db.AssessmentSummaries, {
+  foreignKey: "summary_id",
+  as: "assessment_summary",
+});
+
+// summary <-> assessment signature
+
+db.AssessmentSummaries.hasMany(db.AssessmentSignatures, {
+  foreignKey: "summary_id",
+  as: "assessment_signatures",
+});
+
+db.AssessmentSignatures.belongsTo(db.AssessmentSummaries, {
+  foreignKey: "summary_id",
+  as: "assessment_summary",
+});
+
 // competency <-> positon level
 
 // 5. ส่งออกระบบไปใช้ร่วมกัน

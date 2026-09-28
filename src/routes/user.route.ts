@@ -11,13 +11,19 @@ import { KpiSetUpController } from "../controller/kpi/kpiIndicatorsSetup.control
 import { KpiScoreLevelsController } from "../controller/kpi/kpiScoreLevels.controler";
 import { SignatureController } from "../controller/signature/signature.controller";
 import { DashboardPersonController } from "../controller/dashboard/dashboardPerson.controller";
+import { DashboardFuncunitController } from "../controller/dashboard/dashboardFuncunit.controller";
+import { SetupFuncunitController } from "../controller/slot-setup-funcunit/setupFuncunit.controller";
 
 const router = Router();
 
 router.use(authenticateToken, authorizeRole(1, 2));
 
-// dashboard person
+// dashboard
 router.get("/dashboard/person", DashboardPersonController.getDashboardPerson);
+router.get(
+  "/funcunit-dashboard-summary",
+  DashboardFuncunitController.getFuncunitDashboardSummary,
+);
 
 // updata by nes
 router.get(
@@ -79,5 +85,8 @@ router.post("/upsert-signature", SignatureController.upsertSignature);
 
 // dasboard
 router.get("/person-dashboard", DashboardPersonController.getDashboardPerson);
+
+// checkslot person
+router.post("/check-person-slot", SetupFuncunitController.checkPersonSlot);
 
 export default router;

@@ -243,4 +243,29 @@ export class SlotSetupFuncunitService {
       });
     }
   }
+
+  static async checkPersonSlot(userid: number) {
+    const slot = await dbuser.SlotSetupFuncunit.findOne({
+      where: {
+        userid: userid,
+        active: "Y",
+      },
+    });
+
+    const funcunit = await dbppk.AppPersonFunctionalUnit.findOne({
+      where: {
+        FuncUnitID: slot?.FuncUnitID,
+      },
+      attributes: ["FuncunitID", "FuncunitName"],
+    });
+
+    if (!slot) {
+      throw new Error("ไม่พบข้อมูล Slot");
+    }
+
+    return {
+      funcunitID: funcunit?.FuncunitID,
+      funcunitName: funcunit?.FuncunitName,
+    };
+  }
 }

@@ -14,6 +14,7 @@ class AssessmentSummaries extends Model<
   declare id: CreationOptional<number>;
   declare user_id: number;
   declare head_id: number;
+  declare funcunit_id: number | null;
   declare round: number;
   declare year: number;
   declare kpi_score: string | null;
@@ -43,6 +44,7 @@ AssessmentSummaries.init(
     },
     user_id: { type: DataTypes.INTEGER, allowNull: false },
     head_id: { type: DataTypes.INTEGER, allowNull: false },
+    funcunit_id: { type: DataTypes.INTEGER, allowNull: true },
     round: { type: DataTypes.TINYINT, allowNull: false },
     year: { type: DataTypes.SMALLINT, allowNull: false },
     kpi_score: { type: DataTypes.DECIMAL(5, 2), allowNull: true },

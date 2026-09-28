@@ -70,4 +70,34 @@ export class SetupFuncunitController {
       });
     }
   }
+  static async checkPersonSlot(req: Request, res: Response) {
+    try {
+      const { userid } = req.body;
+      if (!userid) {
+        throw new Error("User ID is required");
+      }
+      const result = await SlotSetupFuncunitService.checkPersonSlot(
+        parseInt(userid),
+      );
+
+      if (!result) {
+        return res.status(403).json({
+          success: false,
+          status: "error",
+          message: "ไม่พบข้อมูล Slot",
+        });
+      }
+      return res.status(200).json({
+        success: true,
+        status: "success",
+        data: result,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        status: "error",
+        message: error.message,
+      });
+    }
+  }
 }

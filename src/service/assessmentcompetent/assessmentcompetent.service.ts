@@ -1,6 +1,7 @@
 import { Op } from "sequelize";
 import db from "../../models/product";
 import dbuser from "../../models/centralusers";
+import dbppk from "../../models/ppkhosp-person";
 import { ApiError } from "../../utils/api-response.util";
 import { parseScore } from "../../utils/score.util";
 import { bufferToSign } from "../../utils/sign-buffer.util";
@@ -510,9 +511,40 @@ class AssessmentService {
         transaction,
       });
 
+      // 3.1 หา funcunit_id ของผู้รับการประเมิน (เช็คจาก Slot เป็นอันดับแรก ถ้าไม่มีให้ดึงจาก AppPerson)
+      let targetFuncUnitId: number | null = null;
+      const activeSlot = await dbuser.SlotSetupFuncunit.findOne({
+        where: { userid: targetUserId, active: "Y" },
+        transaction,
+      });
+
+      if (activeSlot && activeSlot.FuncUnitID) {
+        targetFuncUnitId = Number(activeSlot.FuncUnitID);
+      } else {
+        const personUser = await dbppk.AppUser.findOne({
+          where: { userid: targetUserId },
+          attributes: ["userid", "personid"],
+          include: [
+            {
+              model: dbppk.AppPerson,
+              as: "Person",
+              attributes: ["id", "FuncUnitID"],
+            },
+          ],
+          transaction,
+        });
+
+        if (personUser?.Person?.FuncUnitID) {
+          targetFuncUnitId = Number(personUser.Person.FuncUnitID);
+        } else if (summaryRecord?.funcunit_id) {
+          targetFuncUnitId = Number(summaryRecord.funcunit_id);
+        }
+      }
+
       const summaryData = {
         user_id: targetUserId,
         head_id: targetHeadId || (summaryRecord ? summaryRecord.head_id : 0),
+        funcunit_id: targetFuncUnitId,
         round,
         year,
         kpi_score: kpiScore,

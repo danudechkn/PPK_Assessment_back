@@ -13,6 +13,10 @@ export interface ScoreItemPayload {
   head_value?: number | null;
   submit_value?: number | null;
   score?: number | null;
+  actual_value?: number | null;
+  user_actual_value?: number | null;
+  head_actual_value?: number | null;
+  submit_actual_value?: number | null;
 }
 
 export interface TypeOrderItemPayload {

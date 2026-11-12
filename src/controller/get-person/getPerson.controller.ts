@@ -5,13 +5,19 @@ import { getPersonService } from "../../service/get-person/getPerson.service";
 export class GetPersonController {
   static async headGetPersonByFuncUnit(req: Request, res: Response) {
     try {
-      const funcUnitID = (req as AuthenticatedRequest).user?.funcUnitID;
-      const userID = (req as AuthenticatedRequest).user?.userid;
+      const authReq = req as AuthenticatedRequest;
+      const funcUnitID =
+        req.query.funcUnitID ||
+        req.query.funcID ||
+        authReq.user?.funcUnitID;
+      const userID = authReq.user?.userid || authReq.user?.id;
+      const posLevel = req.query.posLevel as string | undefined;
+      const offID = req.query.offID ? Number(req.query.offID) : undefined;
 
-      //   console.log(userID);
       const result = await getPersonService.headGetPersonByFuncUnit(
         Number(userID),
         Number(funcUnitID),
+        { posLevel, offID }
       );
       if (!result) {
         return res

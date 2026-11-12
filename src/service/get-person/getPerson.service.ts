@@ -3,8 +3,49 @@ import dbppk from "../../models/ppkhosp-person";
 import dbuser from "../../models/centralusers";
 import dbproduct from "../../models/product";
 import { AssessmentHelper } from "../assessmentcompetent/helper/assessment.helper";
+/**
+ * หารายการระดับตำแหน่งที่สูงกว่าหัวหน้า (เพื่อนำมากรองตัดออก ไม่ให้ดึงขึ้นมา)
+ */
+const getHigherLevelsToExclude = (headLevel: string): string[] => {
+  const level = headLevel?.trim() || "";
+
+  if (level.includes("ทรงคุณวุฒิ")) {
+    return [];
+  }
+  if (level.includes("เชี่ยวชาญพิเศษ")) {
+    return ["ทรงคุณวุฒิ"];
+  }
+  if (level.includes("เชี่ยวชาญ")) {
+    return ["ทรงคุณวุฒิ", "เชี่ยวชาญพิเศษ"];
+  }
+  if (level.includes("ชำนาญการพิเศษ")) {
+    return ["ทรงคุณวุฒิ", "เชี่ยวชาญพิเศษ", "เชี่ยวชาญ"];
+  }
+  if (level.includes("ชำนาญการ")) {
+    return ["ทรงคุณวุฒิ", "เชี่ยวชาญพิเศษ", "เชี่ยวชาญ", "ชำนาญการพิเศษ"];
+  }
+  if (
+    level.includes("ชำนาญงาน") ||
+    level.includes("ปฏิบัติการ") ||
+    level.includes("ปฏิบัติงาน")
+  ) {
+    return [
+      "ทรงคุณวุฒิ",
+      "เชี่ยวชาญพิเศษ",
+      "เชี่ยวชาญ",
+      "ชำนาญการพิเศษ",
+      "ชำนาญการ",
+    ];
+  }
+  return [];
+};
+
 export class getPersonService {
-  static async headGetPersonByFuncUnit(userId: number, funcId: number) {
+  static async headGetPersonByFuncUnit(
+    userId: number,
+    funcId: number,
+    filters: { posLevel?: string; offID?: number } = {},
+  ) {
     try {
       // -------------------------------------------------------------
       // สเต็ป 1: ตรวจสอบว่า "ตัวหัวหน้า" ถูก Slot ไปทำงานที่หน่วยงานอื่นหรือไม่
@@ -79,6 +120,31 @@ export class getPersonService {
         StatusID: { [Op.in]: [1, 2, 10] },
         id: { [Op.ne]: 900002 },
       };
+
+      if (filters.posLevel) {
+        if (filters.posLevel === "none" || filters.posLevel === "ไม่มีระดับ") {
+          personWhereCondition.Poslevel = {
+            [Op.or]: [null, "", "-", { [Op.like]: "%ไม่มีระดับ%" }],
+          };
+        } else {
+          const higherLevels = getHigherLevelsToExclude(filters.posLevel);
+          if (higherLevels.length > 0) {
+            personWhereCondition[Op.and] = [
+              ...(personWhereCondition[Op.and] || []),
+              ...higherLevels.map((lvl) => ({
+                [Op.or]: [
+                  { Poslevel: null },
+                  { Poslevel: { [Op.notLike]: `%${lvl}%` } },
+                ],
+              })),
+            ];
+          }
+        }
+      }
+
+      if (filters.offID) {
+        personWhereCondition.OffID = filters.offID;
+      }
       const person = await dbppk.AppPerson.findAll({
         attributes: [
           "id",
@@ -86,6 +152,7 @@ export class getPersonService {
           "lastname",
           "OffID",
           "PosID",
+          "Poslevel",
           "FuncUnitID",
           "StatusID",
         ],
@@ -217,6 +284,7 @@ export class getPersonService {
           userid: targetUserId ? Number(targetUserId) : null,
           name: doctor_name || person_name,
           posName: item.Position?.Positionname || null,
+          posLevel: item.Poslevel ? item.Poslevel.trim() : "ไม่มีระดับ",
           offName: item.OfficePerson?.offname || null,
           offID: item.OffID || null,
           funcunitName: item.FuncUnit?.FuncunitName || null,

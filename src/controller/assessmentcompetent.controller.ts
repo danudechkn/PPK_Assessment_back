@@ -176,11 +176,16 @@ class AssessmentController {
         ? Number(queryTypeOrderId)
         : undefined;
 
+      const reqYear = req.query.year ? Number(req.query.year) : undefined;
+      const reqRound = req.query.round ? Number(req.query.round) : undefined;
+
       const result = await AssessmentService.checkSelfAssessment(
         targetUserId,
         typeOrderId,
         tokenTypeId,
         tokenDoctorId,
+        reqYear,
+        reqRound,
       );
 
       res.status(200).json({ success: true, data: result });

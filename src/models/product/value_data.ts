@@ -17,6 +17,9 @@ class ValueData extends Model<
   declare user_value: number | null;
   declare head_value: number | null;
   declare submit_value: number | null;
+  declare user_actual_value: number | null;
+  declare head_actual_value: number | null;
+  declare submit_actual_value: number | null;
   declare createdAt: Date | null;
   declare updatedAt: Date | null;
 
@@ -50,6 +53,18 @@ ValueData.init(
     },
     submit_value: {
       type: DataTypes.TINYINT,
+      allowNull: true,
+    },
+    user_actual_value: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+    },
+    head_actual_value: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+    },
+    submit_actual_value: {
+      type: DataTypes.DECIMAL(10, 2),
       allowNull: true,
     },
     createdAt: {

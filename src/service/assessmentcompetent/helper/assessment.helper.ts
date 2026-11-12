@@ -22,20 +22,38 @@ export class AssessmentHelper {
     "submit_value",
   ] as const;
 
+  static readonly ACTUAL_VALUE_FIELDS = [
+    "user_actual_value",
+    "head_actual_value",
+    "submit_actual_value",
+    "actual_value",
+  ] as const;
+
+  static readonly ALL_SCORE_FIELDS = [
+    ...AssessmentHelper.SCORE_FIELDS,
+    ...AssessmentHelper.ACTUAL_VALUE_FIELDS,
+  ] as const;
+
   // ==========================================
   // Validation Helpers
   // ==========================================
 
   /**
-   * คำนวณรอบและปี พ.ศ. อัตโนมัติตามวันที่ปัจจุบัน:
-   * - รอบ 1: 1 เม.ย. - 30 ก.ย. (เดือน 4 - 9)
-   * - รอบ 2: 1 ต.ค. - 31 มี.ค. (เดือน 10 - 12 และ 1 - 3)
-   * - ปี: ค.ศ. ปัจจุบัน (เช่น 2026)
+   * คำนวณรอบและปี พ.ศ./ค.ศ. อัตโนมัติตามหลักปีงบประมาณราชการ (ตามเอกสาร):
+   * - รอบที่ 1: 1 ต.ค. - 31 มี.ค. (เดือน 10 - 12 และ 1 - 3)
+   * - รอบที่ 2: 1 เม.ย. - 30 ก.ย. (เดือน 4 - 9)
+   * - ปีงบประมาณ: เดือน 10 - 12 จะนับเป็นปีงบประมาณของปีถัดไป (เช่น ต.ค. 2025 -> ปีงบประมาณ 2026)
    */
   static getCurrentRoundAndYear(date = new Date()) {
     const month = date.getMonth() + 1; // 1 - 12
-    const round = month >= 4 && month <= 9 ? 1 : 2; // 4-9 = รอบ 1, 10-12 และ 1-3 = รอบ 2
-    const year = date.getFullYear(); // ค.ศ. เช่น 2026
+    const currentYear = date.getFullYear(); // ค.ศ. เช่น 2026
+
+    // รอบที่ 2 คือ เดือน 4 ถึง 9 (1 เม.ย. - 30 ก.ย.), รอบที่ 1 คือ เดือน 10-12 และ 1-3 (1 ต.ค. - 31 มี.ค.)
+    const round = month >= 4 && month <= 9 ? 2 : 1;
+
+    // ปีงบประมาณ: ช่วง ต.ค. - ธ.ค. (เดือน 10-12) ให้นับเป็นปีงบประมาณถัดไป (+1)
+    const year = month >= 10 ? currentYear + 1 : currentYear;
+
     return { round, year };
   }
 
@@ -133,14 +151,118 @@ export class AssessmentHelper {
     return payload;
   }
 
+  static parseDecimal(value: unknown, field: string): number | null {
+    if (value === null || value === undefined || value === "") return null;
+    const num = Number(value);
+    if (isNaN(num)) {
+      throw new ApiError(`${field} must be a valid number`);
+    }
+    return Number(num.toFixed(2));
+  }
+
+  /**
+   * คำนวณระดับคะแนน KPI (1-5) จากค่าผลงานจริง (actual_value) เทียบกับเกณฑ์ใน kpi_score_levels
+   * มี Fallback รองรับตามเกณฑ์มาตรฐานโรงพยาบาล (ข้อ 1-2: ร้อยละ, ข้อ 3-5: อุบัติการณ์)
+   */
+  static evaluateKpiScore(
+    actualValue: number | null | undefined,
+    scoreLevels: Array<{ score: number; criteria_text: string; operator_type?: string }> = [],
+    questionText?: string,
+    questionNo?: number,
+  ): number | null {
+    if (actualValue == null || isNaN(Number(actualValue))) return null;
+    const val = Number(actualValue);
+
+    // 1. ตรวจสอบแต่ละระดับตามเกณฑ์ใน scoreLevels หากมี range ระบุไว้
+    if (scoreLevels && scoreLevels.length > 0) {
+      for (const level of scoreLevels) {
+        const text = (level.criteria_text || "").trim();
+        const op = (level.operator_type || "").trim().toUpperCase();
+        const score = Number(level.score);
+
+        // Case BETWEEN (เช่น "91-100", "61-70", "0-1", "6-7")
+        const rangeMatch = text.match(/^(\d+(?:\.\d+)?)\s*[-–—]\s*(\d+(?:\.\d+)?)$/);
+        if (rangeMatch || op === "BETWEEN") {
+          const min = rangeMatch ? parseFloat(rangeMatch[1]) : 0;
+          const max = rangeMatch ? parseFloat(rangeMatch[2]) : 0;
+          const lower = Math.min(min, max);
+          const upper = Math.max(min, max);
+          if (val >= lower && val <= upper) {
+            return score;
+          }
+        }
+
+        // Case Less than / LTE (เช่น "<60", "<=60")
+        const ltMatch = text.match(/^(?:<|<=)\s*(\d+(?:\.\d+)?)$/);
+        if (ltMatch || op === "LT" || op === "LTE") {
+          const threshold = ltMatch ? parseFloat(ltMatch[1]) : parseFloat(text.replace(/[^0-9.]/g, ""));
+          if (!isNaN(threshold) && val <= threshold) {
+            return score;
+          }
+        }
+
+        // Case Greater than / GTE (เช่น ">8", ">=8")
+        const gtMatch = text.match(/^(?:>|>=)\s*(\d+(?:\.\d+)?)$/);
+        if (gtMatch || op === "GT" || op === "GTE") {
+          const threshold = gtMatch ? parseFloat(gtMatch[1]) : parseFloat(text.replace(/[^0-9.]/g, ""));
+          if (!isNaN(threshold) && val >= threshold) {
+            return score;
+          }
+        }
+
+        // Case Equal
+        const eqMatch = text.match(/^(?:=|eq)?\s*(\d+(?:\.\d+)?)$/i);
+        if (eqMatch || op === "EQ") {
+          const target = eqMatch ? parseFloat(eqMatch[1]) : parseFloat(text);
+          if (!isNaN(target) && val === target) {
+            return score;
+          }
+        }
+      }
+    }
+
+    // 2. Fallback ตามเกณฑ์มาตรฐานโรงพยาบาล/ตารางราชการ (ทุกข้อ 1 - 5 ใช้เกณฑ์ร้อยละเหมือนกัน):
+    // < 60% (1), 61 - 70% (2), 71 - 80% (3), 81 - 90% (4), 91 - 100% (5)
+    if (val >= 91) return 5;
+    if (val >= 81) return 4;
+    if (val >= 71) return 3;
+    if (val >= 61) return 2;
+    return 1;
+  }
+
+  /**
+   * คำนวณระดับคะแนนสมรรถนะ (1-5) จากคะแนนจริง 0-100
+   * 91-100: ระดับ 5 (ดีมาก)
+   * 81-90:  ระดับ 4 (ดี)
+   * 71-80:  ระดับ 3 (ปานกลาง)
+   * 61-70:  ระดับ 2 (ต่ำ)
+   * < 60:   ระดับ 1 (ต่ำมาก)
+   */
+  static evaluateCompetencyScore(
+    actualValue: number | null | undefined,
+  ): number | null {
+    if (actualValue == null || isNaN(Number(actualValue))) return null;
+    const val = Number(actualValue);
+    if (val >= 91) return 5;
+    if (val >= 81) return 4;
+    if (val >= 71) return 3;
+    if (val >= 61) return 2;
+    return 1;
+  }
+
   static scorePayload(data: unknown): Record<string, unknown> {
-    const payload = this.pick(data, this.SCORE_FIELDS);
+    const payload = this.pick(data, this.ALL_SCORE_FIELDS);
     if (Object.keys(payload).length === 0) {
       throw new ApiError("At least one score field is required");
     }
     for (const field of this.SCORE_FIELDS) {
       if (payload[field] !== undefined) {
         payload[field] = parseScore(payload[field], field, 127, true);
+      }
+    }
+    for (const field of this.ACTUAL_VALUE_FIELDS) {
+      if (payload[field] !== undefined) {
+        payload[field] = this.parseDecimal(payload[field], field);
       }
     }
     return payload;
@@ -155,17 +277,25 @@ export class AssessmentHelper {
       this.assertObject(item, "Each score item");
       const input = item as Record<string, unknown>;
       const quest = this.parsePositiveId(input.quest, "quest");
-      const scores = this.pick(input, this.SCORE_FIELDS);
+      const scores = this.pick(input, this.ALL_SCORE_FIELDS);
 
       if (Object.keys(scores).length === 0) {
         throw new ApiError(
-          "At least one score field is required for each item",
+          "At least one score or actual_value field is required for each item",
         );
       }
 
       for (const field of this.SCORE_FIELDS) {
         if (scores[field] !== undefined) {
           scores[field] = parseScore(scores[field], field, 127, true);
+        }
+      }
+
+      for (const field of this.ACTUAL_VALUE_FIELDS) {
+        if (scores[field] !== undefined) {
+          const parsed = this.parseDecimal(scores[field], field);
+          scores[field] =
+            parsed !== null ? Math.min(100, Math.max(0, parsed)) : null;
         }
       }
 

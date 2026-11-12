@@ -48,8 +48,17 @@ class AssessmentService {
     typeOrderId?: number,
     typeId?: number,
     doctorId?: number,
+    reqYear?: number,
+    reqRound?: number,
   ) {
-    const { round, year } = AssessmentHelper.getCurrentRoundAndYear();
+    const { round: currentRound, year: currentYear } =
+      AssessmentHelper.getCurrentRoundAndYear();
+    const year = reqYear
+      ? Number(reqYear) > 2500
+        ? Number(reqYear) - 543
+        : Number(reqYear)
+      : currentYear;
+    const round = reqRound ? Number(reqRound) : currentRound;
 
     // 1. ดึงข้อมูลสรุปผลการประเมิน แผนพัฒนาตนเอง และรายการลายเซ็นที่ลงในใบประเมิน
     const summaryRecord = await db.AssessmentSummaries.findOne({
@@ -1067,17 +1076,121 @@ class AssessmentService {
 
     for (const { quest, scores } of validatedItems) {
       if (typeOrderId === 1) {
-        const scoreLevel = await db.KpiScoreLevels.findByPk(quest, {
+        let indicatorId = quest;
+        let currentKpiText = "";
+        let scoreLevels = await db.KpiScoreLevels.findAll({
+          where: { kpi_indicator_id: indicatorId },
           transaction,
         });
-        if (!scoreLevel) {
-          const indicator = await db.KpiIndicators.findByPk(quest, {
+
+        if (scoreLevels.length === 0) {
+          const scoreLevel = await db.KpiScoreLevels.findByPk(quest, {
             transaction,
           });
-          if (!indicator) {
-            throw new ApiError(`KPI item ${quest} not found`, 404);
+          if (scoreLevel) {
+            indicatorId = scoreLevel.kpi_indicator_id;
+            currentKpiText = scoreLevel.criteria_text || "";
+            scoreLevels = await db.KpiScoreLevels.findAll({
+              where: { kpi_indicator_id: indicatorId },
+              transaction,
+            });
+          } else {
+            const indicator = await db.KpiIndicators.findByPk(quest, {
+              transaction,
+            });
+            if (!indicator) {
+              throw new ApiError(`KPI item ${quest} not found`, 404);
+            }
+            currentKpiText = indicator.name || "";
           }
         }
+
+        // 🎯 Auto Evaluate Score from Actual Value using kpi_score_levels (Server-side validation)
+        const actualVal = scores.actual_value as number | undefined;
+        const userActual = scores.user_actual_value as number | undefined;
+        const headActual = scores.head_actual_value as number | undefined;
+        const submitActual = scores.submit_actual_value as number | undefined;
+
+        if (userActual !== undefined && userActual !== null) {
+          const evalScore = AssessmentHelper.evaluateKpiScore(
+            userActual,
+            scoreLevels,
+            currentKpiText,
+            quest,
+          );
+          if (evalScore !== null) {
+            scores.user_value = evalScore;
+          }
+        } else if (
+          actualVal !== undefined &&
+          actualVal !== null &&
+          !isAgreement &&
+          !("head_value" in scores) &&
+          !("head_actual_value" in scores)
+        ) {
+          scores.user_actual_value = actualVal;
+          const evalScore = AssessmentHelper.evaluateKpiScore(
+            actualVal,
+            scoreLevels,
+            currentKpiText,
+            quest,
+          );
+          if (evalScore !== null) {
+            scores.user_value = evalScore;
+          }
+        }
+
+        if (headActual !== undefined && headActual !== null) {
+          const evalScore = AssessmentHelper.evaluateKpiScore(
+            headActual,
+            scoreLevels,
+            currentKpiText,
+            quest,
+          );
+          if (evalScore !== null) {
+            scores.head_value = evalScore;
+          }
+        } else if (
+          actualVal !== undefined &&
+          actualVal !== null &&
+          ("head_value" in scores || "head_actual_value" in scores)
+        ) {
+          scores.head_actual_value = actualVal;
+          const evalScore = AssessmentHelper.evaluateKpiScore(
+            actualVal,
+            scoreLevels,
+            currentKpiText,
+            quest,
+          );
+          if (evalScore !== null) {
+            scores.head_value = evalScore;
+          }
+        }
+
+        if (submitActual !== undefined && submitActual !== null) {
+          const evalScore = AssessmentHelper.evaluateKpiScore(
+            submitActual,
+            scoreLevels,
+            currentKpiText,
+            quest,
+          );
+          if (evalScore !== null) {
+            scores.submit_value = evalScore;
+          }
+        } else if (actualVal !== undefined && actualVal !== null && isAgreement) {
+          scores.submit_actual_value = actualVal;
+          const evalScore = AssessmentHelper.evaluateKpiScore(
+            actualVal,
+            scoreLevels,
+            currentKpiText,
+            quest,
+          );
+          if (evalScore !== null) {
+            scores.submit_value = evalScore;
+          }
+        }
+
+        delete scores.actual_value;
       } else {
         const competency = await db.Competencies.findByPk(quest, {
           transaction,
@@ -1085,6 +1198,39 @@ class AssessmentService {
         if (!competency) {
           throw new ApiError(`Competency ${quest} not found`, 404);
         }
+
+        // รองรับการส่ง actual_value ของ Competency และ mapping 0-100 สู่ระดับ 1-5
+        const actualVal = scores.actual_value as number | undefined;
+        if (actualVal !== undefined && actualVal !== null) {
+          if (!isAgreement && !("head_value" in scores) && !("head_actual_value" in scores)) {
+            if (!("user_actual_value" in scores)) scores.user_actual_value = actualVal;
+          } else if ("head_value" in scores || "head_actual_value" in scores) {
+            if (!("head_actual_value" in scores)) scores.head_actual_value = actualVal;
+          } else if (isAgreement) {
+            if (!("submit_actual_value" in scores)) scores.submit_actual_value = actualVal;
+          }
+        }
+
+        // Auto map actual score (0-100) to level score (1-5) if needed
+        const uActual = scores.user_actual_value as number | undefined;
+        if (uActual !== undefined && uActual !== null) {
+          if (!scores.user_value || Number(scores.user_value) > 5) {
+            scores.user_value = AssessmentHelper.evaluateCompetencyScore(uActual);
+          }
+        }
+        const hActual = scores.head_actual_value as number | undefined;
+        if (hActual !== undefined && hActual !== null) {
+          if (!scores.head_value || Number(scores.head_value) > 5) {
+            scores.head_value = AssessmentHelper.evaluateCompetencyScore(hActual);
+          }
+        }
+        const sActual = scores.submit_actual_value as number | undefined;
+        if (sActual !== undefined && sActual !== null) {
+          if (!scores.submit_value || Number(scores.submit_value) > 5) {
+            scores.submit_value = AssessmentHelper.evaluateCompetencyScore(sActual);
+          }
+        }
+        delete scores.actual_value;
       }
 
       const existing = await db.ValueData.findOne({
@@ -1189,30 +1335,91 @@ class AssessmentService {
     } else {
       // 🟢 Type 2 = Competency
       const competencies = await db.Competencies.findAll({
-        attributes: ["id", "weight"],
+        attributes: ["id", "weight", "competency_category_id"],
+        include: [
+          {
+            model: db.CompetencyCategories,
+            attributes: ["id", "name"],
+            as: "category",
+          },
+        ],
         transaction,
       });
-      const weightMap = new Map<number, number>(
-        competencies.map((c: any) => [Number(c.id), Number(c.weight || 0)]),
+
+      const compMap = new Map<number, { weight: number; categoryName: string }>(
+        competencies.map((c: any) => [
+          Number(c.id),
+          {
+            weight: Number(c.weight || 0),
+            categoryName: c.category?.name || "",
+          },
+        ]),
       );
 
       const defaultWeight = allValues.length > 0 ? 100 / allValues.length : 10;
+      let g1Weighted = 0;
+      let g1Weight = 0;
+      let g2Weighted = 0;
+      let g2Weight = 0;
 
       for (const val of allValues) {
-        const score = val.submit_value ?? val.head_value ?? val.user_value;
-        if (score != null) {
-          const compW = weightMap.get(Number(val.quest));
-          const rawW = compW != null && compW > 0 ? compW : defaultWeight;
+        const rawAct =
+          val.submit_actual_value ??
+          val.head_actual_value ??
+          val.user_actual_value;
+        const score1To5 =
+          val.submit_value ?? val.head_value ?? val.user_value;
+        const score =
+          rawAct != null
+            ? Number(rawAct)
+            : score1To5 != null
+              ? Number(score1To5) <= 5
+                ? Number(score1To5) * 20
+                : Number(score1To5)
+              : null;
 
-          totalWeightedScore += Number(score) * rawW;
-          totalWeight += rawW;
+        if (score != null) {
+          const compInfo = compMap.get(Number(val.quest));
+          const rawW =
+            compInfo && compInfo.weight > 0 ? compInfo.weight : defaultWeight;
+          const catName = compInfo?.categoryName || "";
+          const isG1 =
+            catName.includes("หลัก") ||
+            catName.includes("เฉพาะตามลักษณะงาน");
+          const isG2 =
+            catName.includes("ร่วม") || catName.includes("เฉพาะสาขา");
+
+          if (isG1) {
+            g1Weighted += score * rawW;
+            g1Weight += rawW;
+          } else if (isG2) {
+            g2Weighted += score * rawW;
+            g2Weight += rawW;
+          } else {
+            totalWeightedScore += score * rawW;
+            totalWeight += rawW;
+          }
         }
+      }
+
+      if (g1Weight > 0 && g2Weight > 0) {
+        const g1Score = g1Weighted / g1Weight;
+        const g2Score = g2Weighted / g2Weight;
+        totalWeightedScore = (g1Score + g2Score) / 2;
+        totalWeight = 1;
+      } else if (g1Weight > 0) {
+        totalWeightedScore = g1Weighted / g1Weight;
+        totalWeight = 1;
+      } else if (g2Weight > 0) {
+        totalWeightedScore = g2Weighted / g2Weight;
+        totalWeight = 1;
       }
     }
 
-    // คิดฐาน 100 คะแนน: (คะแนนเฉลี่ยถ่วงน้ำหนัก x 20)
+    // คิดฐาน 100 คะแนน: ถ้าคะแนนเฉลี่ยเป็นฐาน 5 ให้ x 20, ถ้าเป็นฐาน 100 อยู่แล้วไม่ต้อง x 20
     const avgC = totalWeight > 0 ? totalWeightedScore / totalWeight : 0;
-    const computedTotal = Number((avgC * 20).toFixed(2));
+    const finalScore = avgC <= 5 ? avgC * 20 : avgC;
+    const computedTotal = Number(finalScore.toFixed(2));
 
     const updates: any = {};
     if (order.status !== nextStatus) {
@@ -1297,11 +1504,13 @@ class AssessmentService {
     const isHeadValue = valueList.map((item: any) => ({
       quest: item.quest,
       head_value: item.head_value,
+      head_actual_value: item.head_actual_value != null ? Number(item.head_actual_value) : null,
     }));
 
     const isSubmitValue = valueList.map((item: any) => ({
       quest: item.quest,
       submit_value: item.submit_value,
+      submit_actual_value: item.submit_actual_value != null ? Number(item.submit_actual_value) : null,
     }));
 
     const scores = valueList.map((item: any) => ({
@@ -1310,6 +1519,9 @@ class AssessmentService {
       user_value: item.user_value,
       head_value: item.head_value,
       submit_value: item.submit_value,
+      user_actual_value: item.user_actual_value != null ? Number(item.user_actual_value) : null,
+      head_actual_value: item.head_actual_value != null ? Number(item.head_actual_value) : null,
+      submit_actual_value: item.submit_actual_value != null ? Number(item.submit_actual_value) : null,
     }));
 
     const totalSubmitScore = valueList.reduce(

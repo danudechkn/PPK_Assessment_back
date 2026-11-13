@@ -243,6 +243,14 @@ export class AssessmentHelper {
   ): number | null {
     if (actualValue == null || isNaN(Number(actualValue))) return null;
     const val = Number(actualValue);
+    if (val <= 0) return null;
+
+    // ถ้าค่าที่ส่งมาเป็น 1 - 5 (จาก Behavior checklist)
+    if (val <= 5) {
+      return Math.min(5, Math.max(1, Math.round(val)));
+    }
+
+    // ถ้าค่าที่ส่งมาเป็นฐาน 0 - 100
     if (val >= 91) return 5;
     if (val >= 81) return 4;
     if (val >= 71) return 3;

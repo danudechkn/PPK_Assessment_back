@@ -62,7 +62,7 @@ HeaderSetting.init(
     {
         sequelize,
         tableName: "header_setting",
-        timestamps: false,
+        timestamps: true,
     },
 );
 

@@ -1,4 +1,4 @@
-export type AssessmentMode = "SELF" | "HEAD" | "AGREEMENT";
+export type AssessmentMode = "SELF" | "HEAD" | "AGREEMENT" | "ACKNOWLEDGE";
 
 export type AssessmentStatus =
   | "PENDING"
@@ -69,6 +69,9 @@ export interface SaveHeadScoresParams {
   item?: unknown;
   targetUserId?: unknown;
   headId?: number;
+  development_plans?: DevelopmentPlanPayload[] | unknown;
+  signature?: SignaturePayload | unknown;
+  clientIp?: string;
 }
 
 export interface SaveAgreementScoresParams {

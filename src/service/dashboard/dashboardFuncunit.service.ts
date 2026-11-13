@@ -191,11 +191,11 @@ export class DashboardFuncunitService {
       .map(Number);
 
     // -------------------------------------------------------------
-    // 3. ดึงผลสรุปการประเมินจาก assessment_summaries (รองรับทั้งปี ค.ศ. และ พ.ศ.)
+    // 3. ดึงผลสรุปการประเมินจาก assessment_summaries และ ValueOrders (รองรับทั้งปี ค.ศ. และ พ.ศ.)
     // -------------------------------------------------------------
-    const summaries =
+    const [summaries, allValueOrders] = await Promise.all([
       targetUserIds.length > 0
-        ? await dbproduct.AssessmentSummaries.findAll({
+        ? dbproduct.AssessmentSummaries.findAll({
             where: {
               [Op.or]: [
                 {
@@ -211,12 +211,32 @@ export class DashboardFuncunitService {
               ],
             },
           })
-        : [];
+        : [],
+      targetUserIds.length > 0
+        ? dbproduct.ValueOrders.findAll({
+            where: {
+              user_id: { [Op.in]: targetUserIds },
+              year: { [Op.in]: yearConditions },
+              round,
+            },
+          })
+        : [],
+    ]);
 
     const summaryMap = new Map<number, any>();
     for (const s of summaries) {
       if (s.user_id) {
         summaryMap.set(Number(s.user_id), s);
+      }
+    }
+
+    const valueOrderMap = new Map<number, any[]>();
+    for (const vo of allValueOrders) {
+      if (vo.user_id) {
+        const uId = Number(vo.user_id);
+        const list = valueOrderMap.get(uId) || [];
+        list.push(vo);
+        valueOrderMap.set(uId, list);
       }
     }
 
@@ -239,19 +259,67 @@ export class DashboardFuncunitService {
 
     const personList = persons.map((p: any, index: number) => {
       const uId = p.Users?.[0]?.userid || p.Users?.[1]?.userid || null;
-      const s = uId ? summaryMap.get(Number(uId)) : null;
+      let s = uId ? summaryMap.get(Number(uId)) : null;
 
-      const hasAssessed = s && s.total_score !== null;
+      let personTotalScore: number | null =
+        s?.total_score !== null && s?.total_score !== undefined
+          ? Number(s.total_score)
+          : null;
+      let personKpiScore: number | null =
+        s?.kpi_score !== null && s?.kpi_score !== undefined
+          ? Number(s.kpi_score)
+          : null;
+      let personKpiWeighted: number | null =
+        s?.kpi_weighted_score !== null && s?.kpi_weighted_score !== undefined
+          ? Number(s.kpi_weighted_score)
+          : null;
+      let personCompScore: number | null =
+        s?.competency_score !== null && s?.competency_score !== undefined
+          ? Number(s.competency_score)
+          : null;
+      let personCompWeighted: number | null =
+        s?.competency_weighted_score !== null && s?.competency_weighted_score !== undefined
+          ? Number(s.competency_weighted_score)
+          : null;
+
+      // Fallback: ถ้าไม่มี summary หรือคะแนนเป็น null แต่มี ValueOrders ที่หัวหน้าประเมินแล้ว
+      if (personTotalScore == null && uId) {
+        const userOrders = valueOrderMap.get(Number(uId)) || [];
+        const kpiOrder = userOrders.find((o: any) => Number(o.type_order_id) === 1);
+        const compOrder = userOrders.find((o: any) => Number(o.type_order_id) === 2);
+
+        const kScore = kpiOrder?.total_value != null ? Number(kpiOrder.total_value) : null;
+        const cScore = compOrder?.total_value != null ? Number(compOrder.total_value) : null;
+
+        if (kScore != null || cScore != null) {
+          personKpiScore = kScore ?? 0;
+          personKpiWeighted = Number((personKpiScore * 0.7).toFixed(2));
+
+          personCompScore = cScore ?? 0;
+          personCompWeighted = Number((personCompScore * 0.3).toFixed(2));
+
+          personTotalScore = Number((personKpiWeighted + personCompWeighted).toFixed(2));
+        }
+      }
+
+      const hasAssessed = personTotalScore !== null && personTotalScore > 0;
       if (hasAssessed) {
         assessedCount++;
-        totalScoreSum += Number(s.total_score || 0);
-        kpiScoreSum += Number(s.kpi_weighted_score || s.kpi_score || 0);
+        totalScoreSum += Number(personTotalScore || 0);
+        kpiScoreSum += Number(personKpiWeighted || personKpiScore || 0);
         competencyScoreSum += Number(
-          s.competency_weighted_score || s.competency_score || 0
+          personCompWeighted || personCompScore || 0
         );
       }
 
-      const gradeLevel = s?.grade_level ? Number(s.grade_level) : null;
+      let gradeLevel = s?.grade_level ? Number(s.grade_level) : null;
+      if (!gradeLevel && personTotalScore !== null && personTotalScore > 0) {
+        if (personTotalScore >= 90) gradeLevel = 1;
+        else if (personTotalScore >= 80) gradeLevel = 2;
+        else if (personTotalScore >= 70) gradeLevel = 3;
+        else if (personTotalScore >= 60) gradeLevel = 4;
+        else gradeLevel = 5;
+      }
 
       return {
         no: index + 1,
@@ -261,14 +329,14 @@ export class DashboardFuncunitService {
         position: p.Position?.Positionname || "-",
         office: p.OfficePerson?.offname || "-",
         funcunit_name: p.FuncUnit?.FuncunitName || funcunitName,
-        total_score: s?.total_score !== null && s?.total_score !== undefined ? Number(s.total_score) : null,
-        kpi_score: s?.kpi_score !== null && s?.kpi_score !== undefined ? Number(s.kpi_score) : null,
-        kpi_weighted_score: s?.kpi_weighted_score !== null && s?.kpi_weighted_score !== undefined ? Number(s.kpi_weighted_score) : null,
-        competency_score: s?.competency_score !== null && s?.competency_score !== undefined ? Number(s.competency_score) : null,
-        competency_weighted_score: s?.competency_weighted_score !== null && s?.competency_weighted_score !== undefined ? Number(s.competency_weighted_score) : null,
+        total_score: personTotalScore,
+        kpi_score: personKpiScore,
+        kpi_weighted_score: personKpiWeighted,
+        competency_score: personCompScore,
+        competency_weighted_score: personCompWeighted,
         grade_level: gradeLevel,
         grade_label: gradeLevel ? gradeMap[gradeLevel] || "ไม่ระบุ" : "ยังไม่ได้ประเมิน",
-        status: s ? (s.status === 3 ? "COMPLETED" : "IN_PROGRESS") : "PENDING",
+        status: hasAssessed ? "COMPLETED" : "PENDING",
       };
     });
 

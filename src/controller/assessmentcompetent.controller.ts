@@ -98,10 +98,12 @@ class AssessmentController {
         ? "HEAD"
         : rawMode === "AGREEMENT"
           ? "AGREEMENT"
-          : "SELF";
+          : rawMode === "ACKNOWLEDGE"
+            ? "ACKNOWLEDGE"
+            : "SELF";
 
       // ถ้าเป็น HEAD หรือ AGREEMENT: userId คือเป้าหมายลูกน้องที่ถูกประเมิน (จาก body)
-      // ถ้าเป็น SELF: userId คือตนเอง (จาก token)
+      // ถ้าเป็น SELF หรือ ACKNOWLEDGE: userId คือตนเอง (จาก token หรือ fallback body)
       const targetUserId =
         mode === "HEAD" || mode === "AGREEMENT"
           ? req.body?.user_id
@@ -178,6 +180,9 @@ class AssessmentController {
 
       const reqYear = req.query.year ? Number(req.query.year) : undefined;
       const reqRound = req.query.round ? Number(req.query.round) : undefined;
+      const reqOrderId = req.query.orderId || req.query.order_id
+        ? Number(req.query.orderId || req.query.order_id)
+        : undefined;
 
       const result = await AssessmentService.checkSelfAssessment(
         targetUserId,
@@ -186,6 +191,44 @@ class AssessmentController {
         tokenDoctorId,
         reqYear,
         reqRound,
+        reqOrderId,
+      );
+
+      res.status(200).json({ success: true, data: result });
+    } catch (error: unknown) {
+      respondError(res, error);
+    }
+  }
+
+  static async getMyAssessmentHistory(req: Request, res: Response) {
+    try {
+      const authUser = (req as AuthenticatedRequest).user;
+      const rawUserId =
+        authUser?.userid ??
+        authUser?.id ??
+        authUser?.userId ??
+        req.query.userId ??
+        req.query.userid;
+      const tokenUserId = Number(rawUserId);
+
+      if (!tokenUserId || isNaN(tokenUserId)) {
+        return res.status(200).json({
+          success: true,
+          data: {
+            history: [],
+            years: [new Date().getFullYear() + 543],
+            totalCount: 0,
+            completedCount: 0,
+            pendingCount: 0,
+          },
+        });
+      }
+
+      const reqYear = req.query.year ? Number(req.query.year) : undefined;
+
+      const result = await AssessmentService.getMyAssessmentHistory(
+        tokenUserId,
+        reqYear,
       );
 
       res.status(200).json({ success: true, data: result });

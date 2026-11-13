@@ -50,79 +50,137 @@ class AssessmentService {
     doctorId?: number,
     reqYear?: number,
     reqRound?: number,
+    reqOrderId?: number,
   ) {
-    const { round: currentRound, year: currentYear } =
-      AssessmentHelper.getCurrentRoundAndYear();
-    const year = reqYear
+    let year = reqYear
       ? Number(reqYear) > 2500
         ? Number(reqYear) - 543
         : Number(reqYear)
-      : currentYear;
-    const round = reqRound ? Number(reqRound) : currentRound;
+      : undefined;
+    let round = reqRound ? Number(reqRound) : undefined;
+    let targetUserId = userId;
+
+    if (reqOrderId) {
+      const orderRecord = await db.ValueOrders.findByPk(reqOrderId);
+      if (orderRecord) {
+        if (!year) year = Number(orderRecord.year);
+        if (!round) round = Number(orderRecord.round);
+        if (orderRecord.user_id) targetUserId = Number(orderRecord.user_id);
+      } else {
+        const sumRecord = await db.AssessmentSummaries.findByPk(reqOrderId);
+        if (sumRecord) {
+          if (!year) year = Number(sumRecord.year);
+          if (!round) round = Number(sumRecord.round);
+          if (sumRecord.user_id) targetUserId = Number(sumRecord.user_id);
+        }
+      }
+    }
+
+    const { round: currentRound, year: currentYear } =
+      AssessmentHelper.getCurrentRoundAndYear();
+    if (!year) year = currentYear;
+    if (!round) round = currentRound;
+    const activeUserId = targetUserId;
 
     // 1. ดึงข้อมูลสรุปผลการประเมิน แผนพัฒนาตนเอง และรายการลายเซ็นที่ลงในใบประเมิน
-    const summaryRecord = await db.AssessmentSummaries.findOne({
-      where: {
-        [db.Sequelize.Op.or]: [
-          { user_id: userId, year, round },
-          { head_id: userId, year, round },
+    let summaryRecord: any = null;
+    const summaryIncludeOptions = [
+      {
+        model: db.AssessmentDevelopmentPlans,
+        as: "development_plans",
+        attributes: [
+          "id",
+          "summary_id",
+          "need_development",
+          "development_method",
+          "development_period",
+          "sort_order",
         ],
       },
-      attributes: [
-        "id",
-        "user_id",
-        "head_id",
-        "round",
-        "year",
-        "kpi_score",
-        "kpi_weight",
-        "kpi_weighted_score",
-        "competency_score",
-        "competency_weight",
-        "competency_weighted_score",
-        "total_score",
-        "grade_level",
-        "evaluator_status",
-        "status",
-        "createdAt",
-      ],
-      include: [
-        {
-          model: db.AssessmentDevelopmentPlans,
-          as: "development_plans",
-          attributes: [
-            "id",
-            "summary_id",
-            "need_development",
-            "development_method",
-            "development_period",
-            "sort_order",
-          ],
-        },
-        {
-          model: db.AssessmentSignatures,
-          as: "assessment_signatures",
-          attributes: [
-            "id",
-            "summary_id",
-            "signer_id",
-            "signer_type_id",
-            "signer_name",
-            "signer_position",
-            "signature_id",
-            "signed_at",
-          ],
-        },
-      ],
-      order: [
-        ["id", "DESC"],
-        [
-          { model: db.AssessmentDevelopmentPlans, as: "development_plans" },
-          "sort_order",
-          "ASC",
+      {
+        model: db.AssessmentSignatures,
+        as: "assessment_signatures",
+        attributes: [
+          "id",
+          "summary_id",
+          "signer_id",
+          "signer_type_id",
+          "signer_name",
+          "signer_position",
+          "signature_id",
+          "signed_at",
         ],
-      ],
-    });
+      },
+    ];
+
+    if (reqOrderId) {
+      summaryRecord = await db.AssessmentSummaries.findByPk(reqOrderId, {
+        attributes: [
+          "id",
+          "user_id",
+          "head_id",
+          "round",
+          "year",
+          "kpi_score",
+          "kpi_weight",
+          "kpi_weighted_score",
+          "competency_score",
+          "competency_weight",
+          "competency_weighted_score",
+          "total_score",
+          "grade_level",
+          "evaluator_status",
+          "status",
+          "createdAt",
+        ],
+        include: summaryIncludeOptions,
+        order: [
+          [
+            { model: db.AssessmentDevelopmentPlans, as: "development_plans" },
+            "sort_order",
+            "ASC",
+          ],
+        ],
+      });
+    }
+
+    if (!summaryRecord) {
+      summaryRecord = await db.AssessmentSummaries.findOne({
+        where: {
+          [db.Sequelize.Op.or]: [
+            { user_id: activeUserId, year, round },
+            { head_id: activeUserId, year, round },
+          ],
+        },
+        attributes: [
+          "id",
+          "user_id",
+          "head_id",
+          "round",
+          "year",
+          "kpi_score",
+          "kpi_weight",
+          "kpi_weighted_score",
+          "competency_score",
+          "competency_weight",
+          "competency_weighted_score",
+          "total_score",
+          "grade_level",
+          "evaluator_status",
+          "status",
+          "createdAt",
+        ],
+        include: summaryIncludeOptions,
+        order: [
+          ["id", "DESC"],
+          [
+            { model: db.AssessmentDevelopmentPlans, as: "development_plans" },
+            "sort_order",
+            "ASC",
+          ],
+        ],
+      });
+    }
 
     // 2. แปลงผลลัพธ์ summaryRecord และดึงรูปภาพ Base64 ของลายเซ็นแต่ละคนที่ลงชื่อในใบประเมิน
     let summaryList: any = null;
@@ -178,7 +236,7 @@ class AssessmentService {
 
     if (typeOrderId) {
       const data = await db.ValueOrders.findOne({
-        where: { user_id: userId, round, year, type_order_id: typeOrderId },
+        where: { user_id: activeUserId, round, year, type_order_id: typeOrderId },
         include: [
           {
             model: db.ValueData,
@@ -189,7 +247,7 @@ class AssessmentService {
 
       const summaryResult = this.calculateAssessmentSummary(
         data,
-        userId,
+        activeUserId,
         round,
         year,
         typeOrderId,
@@ -207,7 +265,7 @@ class AssessmentService {
 
     // กรณีไม่ระบุ typeOrderId ให้ค้นหา orders ทั้งหมดของผู้ใช้ในรอบ/ปีนี้
     const allOrders = await db.ValueOrders.findAll({
-      where: { user_id: userId, round, year },
+      where: { user_id: activeUserId, round, year },
       include: [
         {
           model: db.ValueData,
@@ -222,16 +280,77 @@ class AssessmentService {
     const competencyOrder =
       allOrders.find((o: any) => Number(o.type_order_id) === 2) || null;
 
+    // ตรวจสอบ fallback สำหรับลายเซ็นหัวหน้า หากยังไม่มีใน assessment_signatures
+    if (!headSignatureUrl) {
+      try {
+        const headIdToLookup =
+          summaryRecord?.head_id ||
+          (kpiOrder as any)?.head_id ||
+          (competencyOrder as any)?.head_id;
+        if (headIdToLookup) {
+          const headUserSign = await dbuser.UserSign.findOne({
+            where: { userid: headIdToLookup, flag_cancel: "N" },
+            include: [{ model: dbuser.UserSignData, as: "SignData" }],
+          });
+          if (headUserSign?.SignData?.signature) {
+            headSignatureUrl = bufferToSign(headUserSign.SignData.signature);
+          }
+        }
+      } catch (err) {
+        // Fallback silently if signature lookup fails
+      }
+    }
+
+    if (summaryList && !summaryList.assessment_signatures.some((s: any) => s.signer_type_id === 2 || s.signer_type_id === "2")) {
+      if (headSignatureUrl) {
+        let headName = "ผู้บังคับบัญชา / ผู้ประเมิน";
+        let headPos = "หัวหน้ากลุ่มงาน / ผู้บังคับบัญชา";
+        if (summaryRecord?.head_id) {
+          try {
+            const headUser = await dbppk.AppUser.findOne({
+              where: { userid: summaryRecord.head_id },
+              attributes: ["userid", "personid"],
+              include: [
+                {
+                  model: dbppk.AppPerson,
+                  as: "Person",
+                  attributes: ["firstname", "lastname"],
+                },
+              ],
+            });
+            const pFirst = headUser?.Person?.firstname || "";
+            const pLast = headUser?.Person?.lastname || "";
+            if (pFirst || pLast) {
+              headName = `${pFirst} ${pLast}`.trim();
+            }
+          } catch (err) {
+            // Keep default headName
+          }
+        }
+
+        summaryList.assessment_signatures.push({
+          id: 0,
+          summary_id: summaryRecord ? summaryRecord.id : 0,
+          signer_id: summaryRecord ? summaryRecord.head_id : 0,
+          signer_type_id: 2,
+          signer_name: headName,
+          signer_position: headPos,
+          signature_url: headSignatureUrl,
+          signed_at: summaryRecord?.createdAt || new Date(),
+        });
+      }
+    }
+
     const kpiSummary = this.calculateAssessmentSummary(
       kpiOrder,
-      userId,
+      activeUserId,
       round,
       year,
       1,
     );
     const competencySummary = this.calculateAssessmentSummary(
       competencyOrder,
-      userId,
+      activeUserId,
       round,
       year,
       2,
@@ -270,6 +389,269 @@ class AssessmentService {
       ...competencySummary,
       hasSelfAssessed,
       hasHeadAssessed,
+    };
+  }
+
+  /**
+   * ดึงประวัติการประเมินตนเองของผู้ใช้ทั้งหมด ทุกปีและทุกรอบ
+   */
+  static async getMyAssessmentHistory(userId: number, reqYear?: number) {
+    let yearFilter: number | undefined = undefined;
+    if (reqYear) {
+      yearFilter = reqYear > 2500 ? reqYear - 543 : reqYear;
+    }
+
+    const orderWhere: any = { user_id: userId };
+    const summaryWhere: any = { user_id: userId };
+    if (yearFilter) {
+      orderWhere.year = yearFilter;
+      summaryWhere.year = yearFilter;
+    }
+
+    // 1. ดึง ValueOrders ทั้งหมดของผู้ใช้
+    const orders = await db.ValueOrders.findAll({
+      where: orderWhere,
+      order: [
+        ["year", "DESC"],
+        ["round", "DESC"],
+        ["type_order_id", "ASC"],
+      ],
+    });
+
+    // 2. ดึง AssessmentSummaries ทั้งหมดของผู้ใช้
+    const summaries = await db.AssessmentSummaries.findAll({
+      where: summaryWhere,
+      include: [
+        {
+          model: db.AssessmentSignatures,
+          as: "assessment_signatures",
+          attributes: ["id", "signer_id", "signer_type_id", "signed_at"],
+        },
+      ],
+      order: [
+        ["year", "DESC"],
+        ["round", "DESC"],
+      ],
+    });
+
+    // 3. รวมและจัดกลุ่มตาม year_round
+    const groupMap = new Map<string, any>();
+    const allYearsSet = new Set<number>();
+
+    // เพิ่มปีปัจจุบันลงใน set เป็นอย่างน้อย
+    const currentYearThai = new Date().getFullYear() + 543;
+    allYearsSet.add(currentYearThai);
+
+    // นำเข้า orders
+    for (const ord of orders) {
+      const y = Number(ord.year);
+      const r = Number(ord.round);
+      if (!y || !r) continue;
+      const thaiYear = y > 2500 ? y : y + 543;
+      allYearsSet.add(thaiYear);
+
+      const key = `${y}_${r}`;
+      if (!groupMap.has(key)) {
+        groupMap.set(key, {
+          year: y,
+          thai_year: thaiYear,
+          round: r,
+          kpiOrder: null,
+          competencyOrder: null,
+          summary: null,
+          updatedAt: ord.updatedAt || ord.createdAt,
+        });
+      }
+      const item = groupMap.get(key);
+      if (Number(ord.type_order_id) === 1) {
+        item.kpiOrder = ord.get({ plain: true });
+      } else if (Number(ord.type_order_id) === 2) {
+        item.competencyOrder = ord.get({ plain: true });
+      }
+      if (
+        ord.updatedAt &&
+        (!item.updatedAt || new Date(ord.updatedAt) > new Date(item.updatedAt))
+      ) {
+        item.updatedAt = ord.updatedAt;
+      }
+    }
+
+    // นำเข้า summaries
+    for (const sum of summaries) {
+      const y = Number(sum.year);
+      const r = Number(sum.round);
+      if (!y || !r) continue;
+      const thaiYear = y > 2500 ? y : y + 543;
+      allYearsSet.add(thaiYear);
+
+      const key = `${y}_${r}`;
+      if (!groupMap.has(key)) {
+        groupMap.set(key, {
+          year: y,
+          thai_year: thaiYear,
+          round: r,
+          kpiOrder: null,
+          competencyOrder: null,
+          summary: null,
+          updatedAt: sum.updatedAt || sum.createdAt,
+        });
+      }
+      const item = groupMap.get(key);
+      item.summary = sum.get({ plain: true });
+      if (
+        sum.updatedAt &&
+        (!item.updatedAt || new Date(sum.updatedAt) > new Date(item.updatedAt))
+      ) {
+        item.updatedAt = sum.updatedAt;
+      }
+    }
+
+    // 4. แปลงโครงสร้างส่งกลับไปให้ Frontend
+    const historyList = Array.from(groupMap.values()).map((grp) => {
+      const {
+        year,
+        thai_year: thaiYear,
+        round,
+        kpiOrder,
+        competencyOrder,
+        summary,
+        updatedAt,
+      } = grp;
+      const orderId =
+        kpiOrder?.id || competencyOrder?.id || summary?.id || `${year}_${round}`;
+
+      // Period text
+      const period =
+        round === 1
+          ? `1 ต.ค. ${thaiYear - 1} - 31 มี.ค. ${thaiYear}`
+          : `1 เม.ย. ${thaiYear} - 30 ก.ย. ${thaiYear}`;
+
+      // Scores (safe number conversion for Sequelize DECIMAL strings)
+      const rawKpiScore = summary?.kpi_score ?? kpiOrder?.total_value ?? null;
+      const rawCompScore =
+        summary?.competency_score ?? competencyOrder?.total_value ?? null;
+      const rawTotalScore = summary?.total_score ?? null;
+
+      const kpiScore =
+        rawKpiScore != null && !isNaN(Number(rawKpiScore))
+          ? Number(Number(rawKpiScore).toFixed(2))
+          : null;
+      const compScore =
+        rawCompScore != null && !isNaN(Number(rawCompScore))
+          ? Number(Number(rawCompScore).toFixed(2))
+          : null;
+      const totalScore =
+        rawTotalScore != null && !isNaN(Number(rawTotalScore))
+          ? Number(Number(rawTotalScore).toFixed(2))
+          : null;
+
+      // Signatures
+      const sigs = summary?.assessment_signatures || [];
+      const hasUserSigned = sigs.some((s: any) => Number(s.signer_type_id) === 1);
+      const hasHeadSigned = sigs.some((s: any) => Number(s.signer_type_id) === 2);
+
+      // Grade
+      let gradeLevel = "-";
+      let gradeBadge = "bg-neutral-50 text-neutral-500 border-neutral-200/80";
+      if (totalScore != null) {
+        if (totalScore >= 90) {
+          gradeLevel = "ดีเด่น";
+          gradeBadge = "bg-[#F2F9E6] text-[#4F7327] border-[#D6EE9C]";
+        } else if (totalScore >= 80) {
+          gradeLevel = "ดีมาก";
+          gradeBadge = "bg-[#F0F7FB] text-[#246B9C] border-[#CEE4F2]";
+        } else if (totalScore >= 70) {
+          gradeLevel = "ดี";
+          gradeBadge = "bg-[#F5F8ED] text-[#55782B] border-[#DCEDBE]";
+        } else if (totalScore >= 60) {
+          gradeLevel = "พอใช้";
+          gradeBadge = "bg-[#FDF7ED] text-[#A0631F] border-[#F7E4C4]";
+        } else {
+          gradeLevel = "ต้องปรับปรุง";
+          gradeBadge = "bg-[#FFF5F4] text-[#A84A42] border-[#FBD6D2]";
+        }
+      }
+
+      // Status
+      const isCompleted =
+        summary?.status === 1 ||
+        (hasUserSigned && hasHeadSigned) ||
+        (kpiOrder?.status === "COMPLETED" && competencyOrder?.status === "COMPLETED") ||
+        kpiOrder?.status === "COMPLETED" ||
+        competencyOrder?.status === "COMPLETED";
+
+      let status = "PENDING";
+      let statusText = "รอดำเนินการ";
+      let statusBadge = "bg-neutral-50 text-neutral-500 border-neutral-200/80";
+      let tabStatus: "completed" | "pending" = "pending";
+
+      if (isCompleted) {
+        status = "COMPLETED";
+        statusText = "ประเมินเสร็จสมบูรณ์";
+        statusBadge = "bg-[#F1F9E4] text-[#4F7327] border-[#D6EE9C]";
+        tabStatus = "completed";
+      } else if (hasHeadSigned && !hasUserSigned) {
+        status = "WAITING_ACKNOWLEDGE";
+        statusText = "รอลงชื่อรับทราบ";
+        statusBadge = "bg-[#FDF8EE] text-[#9E6E1C] border-[#F6E6C0]";
+        tabStatus = "pending";
+      } else if (
+        kpiOrder?.status === "WAITING_AGREEMENT" ||
+        competencyOrder?.status === "WAITING_AGREEMENT"
+      ) {
+        status = "WAITING_AGREEMENT";
+        statusText = "รอกรรมการสรุปตกลง";
+        statusBadge = "bg-[#F8F5FC] text-[#6E4E9E] border-[#E8DEF5]";
+        tabStatus = "pending";
+      } else if (
+        kpiOrder?.status === "SELF_SUBMITTED" ||
+        competencyOrder?.status === "SELF_SUBMITTED"
+      ) {
+        status = "SELF_SUBMITTED";
+        statusText = "ประเมินตนเองแล้ว (รอหัวหน้า)";
+        statusBadge = "bg-[#F0F6FC] text-[#2A659B] border-[#D2E4F7]";
+        tabStatus = "pending";
+      }
+
+      return {
+        orderId,
+        kpiOrderId: kpiOrder?.id || null,
+        competencyOrderId: competencyOrder?.id || null,
+        summaryId: summary?.id || null,
+        year,
+        thaiYear,
+        round,
+        title: `รอบที่ ${round}/${thaiYear}`,
+        period,
+        status,
+        statusText,
+        statusBadge,
+        tabStatus,
+        kpiScore,
+        competencyScore: compScore,
+        totalScore,
+        gradeLevel,
+        gradeBadge,
+        hasUserSigned,
+        hasHeadSigned,
+        updatedAt,
+      };
+    });
+
+    // Sort by year DESC, round DESC
+    historyList.sort((a, b) => {
+      if (b.year !== a.year) return b.year - a.year;
+      return b.round - a.round;
+    });
+
+    const years = Array.from(allYearsSet).sort((a, b) => b - a);
+
+    return {
+      history: historyList,
+      years,
+      totalCount: historyList.length,
+      completedCount: historyList.filter((h) => h.tabStatus === "completed").length,
+      pendingCount: historyList.filter((h) => h.tabStatus === "pending").length,
     };
   }
 
@@ -382,6 +764,9 @@ class AssessmentService {
           item: itemGroup,
           targetUserId: userId,
           headId,
+          development_plans,
+          signature,
+          clientIp,
         });
 
       case "AGREEMENT":
@@ -392,6 +777,14 @@ class AssessmentService {
           userId,
           headId,
           development_plans,
+          signature,
+          clientIp,
+        });
+
+      case "ACKNOWLEDGE":
+        return this.acknowledgeAssessment({
+          userId: Number(userId),
+          summaryId: Number(orderId),
           signature,
           clientIp,
         });
@@ -428,6 +821,10 @@ class AssessmentService {
 
   /**
    * บันทึกคะแนนโดยหัวหน้างาน (Head Assessment)
+   * 1. บันทึกคะแนน KPI และ Competency (head_value, head_actual_value) ลงในตาราง ValueOrders & ValueData
+   * 2. คำนวณสรุปผลคะแนน KPI (70%) และ Competency (30%) พร้อมเกณฑ์ระดับคะแนนลงตาราง assessment_summaries
+   * 3. บันทึกแผนพัฒนาตนเอง (assessment_development_plans)
+   * 4. บันทึกลายเซ็นผู้ประเมิน/หัวหน้างาน (assessment_signatures, signer_type_id: 2)
    */
   static async saveHeadScores({
     orderId,
@@ -435,8 +832,12 @@ class AssessmentService {
     item,
     targetUserId,
     headId,
+    development_plans,
+    signature,
+    clientIp,
   }: SaveHeadScoresParams) {
-    return this.persistScores({
+    // 1. บันทึกคะแนนหัวหน้างานลง ValueOrders & ValueData
+    const scoreResults = await this.persistScores({
       orderIdInput: orderId,
       items,
       multiTypeItems: item,
@@ -445,6 +846,158 @@ class AssessmentService {
       isHead: true,
       mode: "HEAD",
     });
+
+    const parsedUserId = AssessmentHelper.parsePositiveId(targetUserId, "targetUserId");
+    const parsedHeadId = headId ? Number(headId) : 0;
+    const { round, year } = AssessmentHelper.getCurrentRoundAndYear();
+
+    await db.sequelize.transaction(async (transaction: any) => {
+      // 2. ดึงคะแนน ValueOrders ทั้ง KPI (type 1) และ Competency (type 2) เพื่อสรุปผล
+      const orders = await db.ValueOrders.findAll({
+        where: { user_id: parsedUserId, round, year },
+        transaction,
+      });
+
+      const kpiOrder = orders.find((o: any) => Number(o.type_order_id) === 1);
+      const competencyOrder = orders.find((o: any) => Number(o.type_order_id) === 2);
+
+      const kpiScore = kpiOrder ? Number(kpiOrder.total_value || 0) : 0;
+      const competencyScore = competencyOrder ? Number(competencyOrder.total_value || 0) : 0;
+
+      const kpiWeight = 70.0;
+      const competencyWeight = 30.0;
+
+      const kpiWeightedScore = Number((kpiScore * (kpiWeight / 100)).toFixed(2));
+      const competencyWeightedScore = Number((competencyScore * (competencyWeight / 100)).toFixed(2));
+      const totalScore = Number((kpiWeightedScore + competencyWeightedScore).toFixed(2));
+
+      // คำนวณเกณฑ์ระดับคะแนน (grade_level: 1 = ดีเด่น, 2 = ดีมาก, 3 = ดี, 4 = พอใช้, 5 = ต้องปรับปรุง)
+      let gradeLevel = 5;
+      if (totalScore >= 90) gradeLevel = 1;
+      else if (totalScore >= 80) gradeLevel = 2;
+      else if (totalScore >= 70) gradeLevel = 3;
+      else if (totalScore >= 60) gradeLevel = 4;
+
+      // 3. บันทึก/อัปเดตลงตาราง assessment_summaries
+      let summaryRecord = await db.AssessmentSummaries.findOne({
+        where: { user_id: parsedUserId, round, year },
+        transaction,
+      });
+
+      // หา funcunit_id ของผู้รับการประเมิน
+      let targetFuncUnitId: number | null = null;
+      const activeSlot = await dbuser.SlotSetupFuncunit.findOne({
+        where: { userid: parsedUserId, active: "Y" },
+        transaction,
+      });
+
+      if (activeSlot && activeSlot.FuncUnitID) {
+        targetFuncUnitId = Number(activeSlot.FuncUnitID);
+      } else {
+        const personUser = await dbppk.AppUser.findOne({
+          where: { userid: parsedUserId },
+          attributes: ["userid", "personid"],
+          include: [
+            {
+              model: dbppk.AppPerson,
+              as: "Person",
+              attributes: ["id", "FuncUnitID"],
+            },
+          ],
+          transaction,
+        });
+
+        if (personUser?.Person?.FuncUnitID) {
+          targetFuncUnitId = Number(personUser.Person.FuncUnitID);
+        } else if (summaryRecord?.funcunit_id) {
+          targetFuncUnitId = Number(summaryRecord.funcunit_id);
+        }
+      }
+
+      const summaryData = {
+        user_id: parsedUserId,
+        head_id: parsedHeadId || (summaryRecord ? summaryRecord.head_id : 0),
+        funcunit_id: targetFuncUnitId,
+        round,
+        year,
+        kpi_score: kpiScore,
+        kpi_weight: kpiWeight,
+        kpi_weighted_score: kpiWeightedScore,
+        competency_score: competencyScore,
+        competency_weight: competencyWeight,
+        competency_weighted_score: competencyWeightedScore,
+        total_score: totalScore,
+        grade_level: gradeLevel,
+        evaluator_status: 1, // 1 = หัวหน้าแจ้งผลแล้ว
+        status: 2, // 2 = รอผู้รับการประเมินลงนามรับทราบ
+      };
+
+      if (summaryRecord) {
+        await summaryRecord.update(summaryData, { transaction });
+      } else {
+        summaryRecord = await db.AssessmentSummaries.create(summaryData, {
+          transaction,
+        });
+      }
+
+      const summaryId = summaryRecord.id;
+
+      // 4. บันทึกแผนพัฒนาตนเอง (assessment_development_plans)
+      if (Array.isArray(development_plans) && development_plans.length > 0) {
+        await db.AssessmentDevelopmentPlans.destroy({
+          where: { summary_id: summaryId },
+          transaction,
+        });
+
+        const plansToInsert = (development_plans as any[]).map(
+          (plan: any, idx: number) => ({
+            summary_id: summaryId,
+            need_development: plan.need_development || "",
+            development_method: plan.development_method || "",
+            development_period: plan.development_period || "",
+            sort_order: String(plan.sort_order || idx + 1),
+          }),
+        );
+
+        await db.AssessmentDevelopmentPlans.bulkCreate(plansToInsert, {
+          transaction,
+        });
+      }
+
+      // 5. บันทึกลายเซ็นหัวหน้า/ผู้ประเมิน (assessment_signatures: signer_type_id: 2)
+      if (signature) {
+        const sigObj = signature as any;
+        const signatureId = sigObj.signature_id || sigObj.id;
+
+        if (signatureId) {
+          // ลบลายเซ็นหัวหน้าเดิมของ summary นี้ เพื่ออัปเดตลายเซ็นล่าสุด
+          await db.AssessmentSignatures.destroy({
+            where: {
+              summary_id: summaryId,
+              signer_type_id: 2,
+            },
+            transaction,
+          });
+
+          await db.AssessmentSignatures.create(
+            {
+              summary_id: summaryId,
+              signer_id: sigObj.signer_id || parsedHeadId || parsedUserId,
+              signer_type_id: 2, // 2 = หัวหน้า/ผู้ประเมิน
+              signer_name: sigObj.signer_name || "",
+              signer_position: sigObj.signer_position || null,
+              signature_id: signatureId,
+              comment: sigObj.comment || null,
+              signed_at: new Date(),
+              ip_address: sigObj.ip_address || clientIp || "127.0.0.1",
+            },
+            { transaction },
+          );
+        }
+      }
+    });
+
+    return scoreResults;
   }
 
   /**
@@ -628,8 +1181,165 @@ class AssessmentService {
   }
 
   /**
-   * แก้ไขคะแนนรายข้อ (เฉพาะรายการที่ยังไม่ได้ยืนยันผล submit_value หรือยังไม่ COMPLETED)
+   * ลูกน้องลงชื่อรับทราบผลการประเมิน (Acknowledge Assessment)
+   * บันทึกลายเซ็นลูกน้อง (signer_type_id: 1) และเปลี่ยนสถานะเป็น COMPLETED
    */
+  static async acknowledgeAssessment({
+    userId,
+    summaryId,
+    signature,
+    clientIp,
+  }: {
+    userId: number;
+    summaryId?: number;
+    signature?: unknown;
+    clientIp?: string;
+  }) {
+    const targetUserId = AssessmentHelper.parsePositiveId(userId, "userId");
+    const { round, year } = AssessmentHelper.getCurrentRoundAndYear();
+
+    return db.sequelize.transaction(async (transaction: any) => {
+      let summary = summaryId
+        ? await db.AssessmentSummaries.findByPk(summaryId, { transaction })
+        : null;
+
+      // Fallback 1: ค้นหาจากรอบ/ปีปัจจุบันของผู้รับการประเมิน
+      if (!summary) {
+        summary = await db.AssessmentSummaries.findOne({
+          where: { user_id: targetUserId, round, year },
+          transaction,
+        });
+      }
+
+      // Fallback 2: ถ้า summaryId ที่ส่งมาอาจเป็น ValueOrders ID
+      if (!summary && summaryId) {
+        const orderRecord = await db.ValueOrders.findByPk(summaryId, {
+          transaction,
+        });
+        if (orderRecord && orderRecord.user_id) {
+          summary = await db.AssessmentSummaries.findOne({
+            where: {
+              user_id: Number(orderRecord.user_id),
+              round: Number(orderRecord.round),
+              year: Number(orderRecord.year),
+            },
+            transaction,
+          });
+        }
+      }
+
+      // Fallback 3: ค้นหารายการ summary ล่าสุดของผู้ใช้
+      if (!summary) {
+        summary = await db.AssessmentSummaries.findOne({
+          where: { user_id: targetUserId },
+          order: [["id", "DESC"]],
+          transaction,
+        });
+      }
+
+      // Fallback 4: ถ้ายังไม่พบ summary เลย (เช่น เกิดจากข้อมูลที่หัวหน้าประเมินไว้ก่อนอัปเดตระบบ)
+      // ดึง ValueOrders มาคำนวณและสร้าง AssessmentSummaries ให้โดยอัตโนมัติ ไม่ให้ 404
+      if (!summary) {
+        const orders = await db.ValueOrders.findAll({
+          where: { user_id: targetUserId, round, year },
+          transaction,
+        });
+
+        const kpiOrder = orders.find((o: any) => Number(o.type_order_id) === 1);
+        const competencyOrder = orders.find((o: any) => Number(o.type_order_id) === 2);
+
+        const kpiScore = kpiOrder ? Number(kpiOrder.total_value || 0) : 0;
+        const competencyScore = competencyOrder ? Number(competencyOrder.total_value || 0) : 0;
+        const kpiWeightedScore = Number((kpiScore * 0.7).toFixed(2));
+        const competencyWeightedScore = Number((competencyScore * 0.3).toFixed(2));
+        const totalScore = Number((kpiWeightedScore + competencyWeightedScore).toFixed(2));
+
+        let gradeLevel = 5;
+        if (totalScore >= 90) gradeLevel = 1;
+        else if (totalScore >= 80) gradeLevel = 2;
+        else if (totalScore >= 70) gradeLevel = 3;
+        else if (totalScore >= 60) gradeLevel = 4;
+
+        const headIdFromOrder = kpiOrder?.head_id || competencyOrder?.head_id || 0;
+
+        summary = await db.AssessmentSummaries.create(
+          {
+            user_id: targetUserId,
+            head_id: headIdFromOrder,
+            round,
+            year,
+            kpi_score: kpiScore,
+            kpi_weight: 70.0,
+            kpi_weighted_score: kpiWeightedScore,
+            competency_score: competencyScore,
+            competency_weight: 30.0,
+            competency_weighted_score: competencyWeightedScore,
+            total_score: totalScore,
+            grade_level: gradeLevel,
+            evaluator_status: 1,
+            status: 2,
+          },
+          { transaction },
+        );
+      }
+
+      const activeSummaryId = summary.id;
+
+      if (signature) {
+        const sigObj = signature as any;
+        const signatureId = sigObj.signature_id || sigObj.id;
+
+        if (signatureId) {
+          await db.AssessmentSignatures.destroy({
+            where: {
+              summary_id: activeSummaryId,
+              signer_type_id: 1, // 1 = ผู้รับการประเมิน
+            },
+            transaction,
+          });
+
+          await db.AssessmentSignatures.create(
+            {
+              summary_id: activeSummaryId,
+              signer_id: targetUserId,
+              signer_type_id: 1, // 1 = ผู้รับการประเมิน
+              signer_name: sigObj.signer_name || "",
+              signer_position: sigObj.signer_position || null,
+              signature_id: signatureId,
+              comment: sigObj.comment || "รับทราบผลการประเมินเรียบร้อยแล้ว",
+              signed_at: new Date(),
+              ip_address: sigObj.ip_address || clientIp || "127.0.0.1",
+            },
+            { transaction },
+          );
+        }
+      }
+
+      // ปรับสถานะ summary เป็น 1 (เสร็จสมบูรณ์) และ evaluator_status = 2 (รับทราบแล้ว)
+      await summary.update(
+        {
+          status: 1,
+          evaluator_status: 2,
+        },
+        { transaction },
+      );
+
+      // ปรับคำสั่ง ValueOrders ให้เสร็จสมบูรณ์
+      await db.ValueOrders.update(
+        { status: "COMPLETED" },
+        {
+          where: { user_id: targetUserId, round, year },
+          transaction,
+        },
+      );
+
+      return {
+        message: "Acknowledged assessment successfully",
+        summary_id: activeSummaryId,
+        status: "COMPLETED",
+      };
+    });
+  }
   static async updateScoreItem(id: number, data: unknown) {
     AssessmentHelper.assertPositiveId(id, "scoreId");
     const payload = AssessmentHelper.scorePayload(data);
@@ -835,7 +1545,9 @@ class AssessmentService {
         ? "HEAD"
         : normalizedMode === "AGREEMENT"
           ? "AGREEMENT"
-          : "SELF";
+          : normalizedMode === "ACKNOWLEDGE"
+            ? "ACKNOWLEDGE"
+            : "SELF";
 
     return {
       orderId,

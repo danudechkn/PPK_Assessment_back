@@ -92,6 +92,17 @@ db.DoctorImageData.belongsTo(db.DoctorImage, {
   foreignKey: "id",
 });
 
+if (db.HeaderType && db.HeaderSetting) {
+  db.HeaderType.hasMany(db.HeaderSetting, {
+    foreignKey: "header_type_id",
+    as: "header_settings",
+  });
+  db.HeaderSetting.belongsTo(db.HeaderType, {
+    foreignKey: "header_type_id",
+    as: "header_type",
+  });
+}
+
 // 5. ส่งออกระบบไปใช้ร่วมกัน
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;

@@ -5,7 +5,10 @@ import {
   authenticateToken,
   authorizeRole,
 } from "../middleware/auth.middleware";
-import CompetentController from "../controller/competent.controller";
+import {
+  CompetenciesController,
+  BehaviorsController,
+} from "../controller/competent";
 import { GetPersonController } from "../controller/get-person/getPerson.controller";
 import { KpiSetUpController } from "../controller/kpi/kpiIndicatorsSetup.controller";
 import { KpiScoreLevelsController } from "../controller/kpi/kpiScoreLevels.controler";
@@ -13,6 +16,8 @@ import { SignatureController } from "../controller/signature/signature.controlle
 import { DashboardPersonController } from "../controller/dashboard/dashboardPerson.controller";
 import { DashboardFuncunitController } from "../controller/dashboard/dashboardFuncunit.controller";
 import { SetupFuncunitController } from "../controller/slot-setup-funcunit/setupFuncunit.controller";
+import { HeaderSettingController } from "../controller/header-setting/headerSetting.controller";
+import { HeaderTypeController } from "../controller/header-type/headerType.controller";
 
 const router = Router();
 
@@ -28,10 +33,16 @@ router.get(
 // updata by nes
 router.get(
   "/conpetency-by-access",
-  CompetentController.getCompetentByUserAccess,
+  CompetenciesController.getCompetentByUserAccess,
+);
+
+router.get(
+  "/competencies/:competencyId/behaviors",
+  BehaviorsController.getBehaviorsByCompetency,
 );
 
 router.get("/check-self-assessment", AssessmentController.checkSelfAssessment);
+router.get("/my-assessment-history", AssessmentController.getMyAssessmentHistory);
 router.get(
   "/get-person-by-funcunit",
   GetPersonController.headGetPersonByFuncUnit,
@@ -88,5 +99,18 @@ router.get("/person-dashboard", DashboardPersonController.getDashboardPerson);
 
 // checkslot person
 router.post("/check-person-slot", SetupFuncunitController.checkPersonSlot);
+
+// header setting (by funcunit / user)
+router.get(
+  "/header-settings/by-funcunit/:funcunitid",
+  HeaderSettingController.getByFuncunit,
+);
+router.get(
+  "/header-settings/by-user/:userid",
+  HeaderSettingController.getByUser,
+);
+
+// header type active
+router.get("/header-types/active", HeaderTypeController.getActive);
 
 export default router;

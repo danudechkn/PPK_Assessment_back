@@ -140,6 +140,13 @@ class CompetentService {
           attributes: ["id", "name"],
           as: "category",
         },
+        {
+          model: db.Behavior,
+          attributes: ["id", "description", "status"],
+          as: "behaviors",
+          where: { status: "Y" },
+          required: false,
+        },
       ],
       order: [
         ["competency_category_id", "ASC"],
@@ -157,6 +164,7 @@ class CompetentService {
           competency: string;
           expected_score: number;
           weight: number;
+          behaviors: Array<{ id: number; description: string }>;
         }>;
       }
     >();
@@ -175,6 +183,10 @@ class CompetentService {
         competency: item.competency,
         expected_score: item.expected_score,
         weight: item.weight,
+        behaviors: (item.behaviors || []).map((b: any) => ({
+          id: b.id,
+          description: b.description,
+        })),
       });
     }
     // 3. แปลงผลลัพธ์จาก Map เป็น Array ส่งกลับ

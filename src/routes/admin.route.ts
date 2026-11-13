@@ -1,9 +1,15 @@
 import express from "express";
-import CompetentController from "../controller/competent.controller";
+import {
+  CategoriesController,
+  CompetenciesController,
+  BehaviorsController,
+} from "../controller/competent";
 import AssessmentController from "../controller/assessmentcompetent.controller";
 import KpiController from "../controller/kpi.controller";
 import { ChoiceSetupController } from "../controller/choice-setup/chioiceSetup.controller";
 import { SetupFuncunitController } from "../controller/slot-setup-funcunit/setupFuncunit.controller";
+import { HeaderSettingController } from "../controller/header-setting/headerSetting.controller";
+import { HeaderTypeController } from "../controller/header-type/headerType.controller";
 import { KpiSetUpController } from "../controller/kpi/kpiIndicatorsSetup.controller";
 import { KpiScoreLevelsController } from "../controller/kpi/kpiScoreLevels.controler";
 import {
@@ -24,27 +30,27 @@ router.use(authenticateToken, authorizeRole(2));
 router.get("/choice-setup", ChoiceSetupController.getListChoiceSetup);
 
 // --- Competency master data ---
-router.get("/categories", CompetentController.getAllCategories); // ดูหมวดหมู่ categories ทั้งหมด
-router.get("/categories/:id", CompetentController.getCategoryById); // ดูหมวดหมู่ categories รายการเดียว
-router.post("/categories", CompetentController.createCategory); // เพิ่มหมวดหมู่ categories (รองรับ dataArray)
-router.put("/categories/:id", CompetentController.updateCategory); // แก้ไขหมวดหมู่ categories
-router.delete("/categories/:id", CompetentController.deleteCategory); // ลบหมวดหมู่ categories
+router.get("/categories", CategoriesController.getAllCategories); // ดูหมวดหมู่ categories ทั้งหมด
+router.get("/categories/:id", CategoriesController.getCategoryById); // ดูหมวดหมู่ categories รายการเดียว
+router.post("/categories", CategoriesController.createCategory); // เพิ่มหมวดหมู่ categories (รองรับ dataArray)
+router.put("/categories/:id", CategoriesController.updateCategory); // แก้ไขหมวดหมู่ categories
+router.delete("/categories/:id", CategoriesController.deleteCategory); // ลบหมวดหมู่ categories
 
 //----------------------------------------------------------------------------------------------------------------
-// router.get("/categories/full", CompetentController.getCategoriesFull); // ดูหมวดหมู่พร้อม Competency และพฤติกรรม
+// router.get("/categories/full", CategoriesController.getCategoriesFull); // ดูหมวดหมู่พร้อม Competency และพฤติกรรม
 //----------------------------------------------------------------------------------------------------------------
 
-router.get("/competencies", CompetentController.getCompetent); // ดู Competency ทั้งหมด
-router.get("/competencies/:id", CompetentController.getCompetentById); // ดู Competency รายการเดียว
-router.post("/competencies", CompetentController.createCompetent); // เพิ่ม Competency (รองรับ dataArray)
-router.put("/competencies/:id", CompetentController.updateCompetent); // แก้ไข Competency
-router.delete("/competencies/:id", CompetentController.deleteCompetent); // ลบ Competency
+router.get("/competencies", CompetenciesController.getCompetent); // ดู Competency ทั้งหมด
+router.get("/competencies/:id", CompetenciesController.getCompetentById); // ดู Competency รายการเดียว
+router.post("/competencies", CompetenciesController.createCompetent); // เพิ่ม Competency (รองรับ dataArray)
+router.put("/competencies/:id", CompetenciesController.updateCompetent); // แก้ไข Competency
+router.delete("/competencies/:id", CompetenciesController.deleteCompetent); // ลบ Competency
 
-router.get("/behaviors", CompetentController.getBehavior); // ดูพฤติกรรมประกอบ Competency ทั้งหมด
-router.get("/behaviors/:id", CompetentController.getBehaviorById); // ดูพฤติกรรมประกอบ Competency รายการเดียว
-router.post("/behaviors", CompetentController.createBehavior); // เพิ่มพฤติกรรม (รองรับ dataArray)
-router.put("/behaviors/:id", CompetentController.updateBehavior); // แก้ไขพฤติกรรม
-router.delete("/behaviors/:id", CompetentController.deleteBehavior); // ลบพฤติกรรม
+router.get("/behaviors", BehaviorsController.getBehavior); // ดูพฤติกรรมประกอบ Competency ทั้งหมด
+router.get("/behaviors/:id", BehaviorsController.getBehaviorById); // ดูพฤติกรรมประกอบ Competency รายการเดียว
+router.post("/behaviors", BehaviorsController.createBehavior); // เพิ่มพฤติกรรม (รองรับ dataArray)
+router.put("/behaviors/:id", BehaviorsController.updateBehavior); // แก้ไขพฤติกรรม
+router.delete("/behaviors/:id", BehaviorsController.deleteBehavior); // ลบพฤติกรรม
 
 // --- Assessment order management ---
 router.get("/assessments", AssessmentController.getAllOrders); // ดูรอบการประเมินทั้งหมด (filter ได้)
@@ -112,5 +118,28 @@ router.post(
   "/create-edit-setup-person-funcunit",
   SetupFuncunitController.createOrEditSetUpPersonFuncunit,
 );
+
+// --- Header Settings Setup (by nes) ---
+router.get("/header-settings", HeaderSettingController.index);
+router.post("/header-settings", HeaderSettingController.create);
+router.get("/header-settings/:id", HeaderSettingController.show);
+router.put("/header-settings/:id", HeaderSettingController.update);
+router.delete("/header-settings/:id", HeaderSettingController.delete);
+router.get(
+  "/header-settings/by-funcunit/:funcunitid",
+  HeaderSettingController.getByFuncunit,
+);
+router.get(
+  "/header-settings/by-user/:userid",
+  HeaderSettingController.getByUser,
+);
+
+// --- Header Types Setup (by nes) ---
+router.get("/header-types", HeaderTypeController.index);
+router.get("/header-types/active", HeaderTypeController.getActive);
+router.post("/header-types", HeaderTypeController.create);
+router.get("/header-types/:id", HeaderTypeController.show);
+router.put("/header-types/:id", HeaderTypeController.update);
+router.delete("/header-types/:id", HeaderTypeController.delete);
 
 export default router;

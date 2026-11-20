@@ -884,32 +884,37 @@ class AssessmentService {
         transaction,
       });
 
-      // หา funcunit_id ของผู้รับการประเมิน
+      // หา funcunit_id ของผู้รับการประเมิน (ไม่ส่ง transaction ของ db.sequelize ข้าม connection)
       let targetFuncUnitId: number | null = null;
-      const activeSlot = await dbuser.SlotSetupFuncunit.findOne({
-        where: { userid: parsedUserId, active: "Y" },
-        transaction,
-      });
-
-      if (activeSlot && activeSlot.FuncUnitID) {
-        targetFuncUnitId = Number(activeSlot.FuncUnitID);
-      } else {
-        const personUser = await dbppk.AppUser.findOne({
-          where: { userid: parsedUserId },
-          attributes: ["userid", "personid"],
-          include: [
-            {
-              model: dbppk.AppPerson,
-              as: "Person",
-              attributes: ["id", "FuncUnitID"],
-            },
-          ],
-          transaction,
+      try {
+        const activeSlot = await dbuser.SlotSetupFuncunit.findOne({
+          where: { userid: parsedUserId, active: "Y" },
         });
 
-        if (personUser?.Person?.FuncUnitID) {
-          targetFuncUnitId = Number(personUser.Person.FuncUnitID);
-        } else if (summaryRecord?.funcunit_id) {
+        if (activeSlot && activeSlot.FuncUnitID) {
+          targetFuncUnitId = Number(activeSlot.FuncUnitID);
+        } else {
+          const personUser = await dbppk.AppUser.findOne({
+            where: { userid: parsedUserId },
+            attributes: ["userid", "personid"],
+            include: [
+              {
+                model: dbppk.AppPerson,
+                as: "Person",
+                attributes: ["id", "FuncUnitID"],
+              },
+            ],
+          });
+
+          if (personUser?.Person?.FuncUnitID) {
+            targetFuncUnitId = Number(personUser.Person.FuncUnitID);
+          } else if (summaryRecord?.funcunit_id) {
+            targetFuncUnitId = Number(summaryRecord.funcunit_id);
+          }
+        }
+      } catch (slotErr) {
+        console.warn("Could not retrieve funcunit_id for user:", slotErr);
+        if (summaryRecord?.funcunit_id) {
           targetFuncUnitId = Number(summaryRecord.funcunit_id);
         }
       }
@@ -1073,32 +1078,37 @@ class AssessmentService {
         transaction,
       });
 
-      // 3.1 หา funcunit_id ของผู้รับการประเมิน (เช็คจาก Slot เป็นอันดับแรก ถ้าไม่มีให้ดึงจาก AppPerson)
+      // 3.1 หา funcunit_id ของผู้รับการประเมิน (ไม่ส่ง transaction ของ db.sequelize ข้าม connection)
       let targetFuncUnitId: number | null = null;
-      const activeSlot = await dbuser.SlotSetupFuncunit.findOne({
-        where: { userid: targetUserId, active: "Y" },
-        transaction,
-      });
-
-      if (activeSlot && activeSlot.FuncUnitID) {
-        targetFuncUnitId = Number(activeSlot.FuncUnitID);
-      } else {
-        const personUser = await dbppk.AppUser.findOne({
-          where: { userid: targetUserId },
-          attributes: ["userid", "personid"],
-          include: [
-            {
-              model: dbppk.AppPerson,
-              as: "Person",
-              attributes: ["id", "FuncUnitID"],
-            },
-          ],
-          transaction,
+      try {
+        const activeSlot = await dbuser.SlotSetupFuncunit.findOne({
+          where: { userid: targetUserId, active: "Y" },
         });
 
-        if (personUser?.Person?.FuncUnitID) {
-          targetFuncUnitId = Number(personUser.Person.FuncUnitID);
-        } else if (summaryRecord?.funcunit_id) {
+        if (activeSlot && activeSlot.FuncUnitID) {
+          targetFuncUnitId = Number(activeSlot.FuncUnitID);
+        } else {
+          const personUser = await dbppk.AppUser.findOne({
+            where: { userid: targetUserId },
+            attributes: ["userid", "personid"],
+            include: [
+              {
+                model: dbppk.AppPerson,
+                as: "Person",
+                attributes: ["id", "FuncUnitID"],
+              },
+            ],
+          });
+
+          if (personUser?.Person?.FuncUnitID) {
+            targetFuncUnitId = Number(personUser.Person.FuncUnitID);
+          } else if (summaryRecord?.funcunit_id) {
+            targetFuncUnitId = Number(summaryRecord.funcunit_id);
+          }
+        }
+      } catch (slotErr) {
+        console.warn("Could not retrieve funcunit_id for target user:", slotErr);
+        if (summaryRecord?.funcunit_id) {
           targetFuncUnitId = Number(summaryRecord.funcunit_id);
         }
       }

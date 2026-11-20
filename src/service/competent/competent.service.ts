@@ -1,4 +1,5 @@
 import db from "../../models/product";
+import { Op } from "sequelize";
 import { ApiError } from "../../utils/api-response.util";
 import {
   PaginationQuery,
@@ -43,10 +44,22 @@ class CompetentService {
     });
 
     const officeIds = [
-      ...new Set(rows.map((r: any) => r.type_person_id).filter(Boolean)),
+      ...new Set(
+        rows
+          .map((r: any) => r.type_person_id)
+          .filter(
+            (v: any) => v !== null && v !== undefined && !Number.isNaN(Number(v)),
+          ),
+      ),
     ] as number[];
     const funcUnitIds = [
-      ...new Set(rows.map((r: any) => r.func_unit_id).filter(Boolean)),
+      ...new Set(
+        rows
+          .map((r: any) => r.func_unit_id)
+          .filter(
+            (v: any) => v !== null && v !== undefined && !Number.isNaN(Number(v)),
+          ),
+      ),
     ] as number[];
 
     const [officeMap, funcUnitMap] = await Promise.all([
@@ -120,12 +133,26 @@ class CompetentService {
     // levelId: number,
   ) {
     // 1. ดึงข้อมูล Competencies ทั้งหมดที่ตรงเงื่อนไขพร้อม JOIN Category
+    // ถ้าข้อไหนตั้ง type_person_id: 0 (ทั้งหมด) หรือ func_unit_id: 0 (ทุกกลุ่มงาน) ทุกคนจะได้เห็นหมด
     const list = await db.Competencies.findAll({
       where: {
-        type_person_id: offID,
-        func_unit_id: funcID,
-        // type_person_id: levelId,
-        status: "Y",
+        [Op.and]: [
+          {
+            [Op.or]: [
+              { type_person_id: offID },
+              { type_person_id: 0 },
+              { type_person_id: null },
+            ],
+          },
+          {
+            [Op.or]: [
+              { func_unit_id: funcID },
+              { func_unit_id: 0 },
+              { func_unit_id: null },
+            ],
+          },
+          { status: "Y" },
+        ],
       },
       attributes: [
         "id",

@@ -32,7 +32,7 @@ export class CompetentHelper {
   static parsePagination(
     query: PaginationQuery = {},
     defaultLimit = 10,
-    maxLimit = 50,
+    maxLimit = 100,
   ) {
     return parsePagination(query, defaultLimit, maxLimit);
   }
@@ -41,15 +41,18 @@ export class CompetentHelper {
     value: unknown,
     field: string,
     nullable = false,
+    allowZero = false,
   ): number | null {
     if (nullable && (value === "" || value === null)) return null;
     if (
       (typeof value !== "number" && typeof value !== "string") ||
       !/^\d+$/.test(String(value)) ||
       !Number.isSafeInteger(Number(value)) ||
-      Number(value) <= 0
+      (allowZero ? Number(value) < 0 : Number(value) <= 0)
     ) {
-      throw new ApiError(`${field} must be a positive integer`);
+      throw new ApiError(
+        `${field} must be a ${allowZero ? "non-negative" : "positive"} integer`,
+      );
     }
     return Number(value);
   }
@@ -114,7 +117,12 @@ export class CompetentHelper {
       "position_level_id",
     ]) {
       if (payload[field] !== undefined)
-        payload[field] = this.parseId(payload[field], field, true);
+        payload[field] = this.parseId(
+          payload[field],
+          field,
+          true,
+          field === "type_person_id" || field === "func_unit_id",
+        );
     }
     if (payload.expected_score !== undefined) {
       payload.expected_score = parseScore(

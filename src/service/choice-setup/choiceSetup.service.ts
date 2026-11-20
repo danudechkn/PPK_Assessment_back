@@ -13,7 +13,15 @@ export class ChoiceSetupService {
     if (!funcunit) {
       throw new Error("Function not exist");
     }
-    return funcunit;
+    const allOption = {
+      FuncunitID: 0,
+      FuncunitName: "ทุกกลุ่มงาน",
+      TyCode: "",
+    };
+    const list = funcunit.map((item: any) =>
+      typeof item.toJSON === "function" ? item.toJSON() : item,
+    );
+    return [allOption, ...list];
   }
 
   static async personnalOfficeGroup() {
@@ -21,7 +29,14 @@ export class ChoiceSetupService {
     if (!personnalofficegroup) {
       throw new Error("Personnal office group not exist");
     }
-    return personnalofficegroup;
+    const allOption = {
+      offid: 0,
+      offname: "ทั้งหมด",
+    };
+    const list = personnalofficegroup.map((item: any) =>
+      typeof item.toJSON === "function" ? item.toJSON() : item,
+    );
+    return [allOption, ...list];
   }
 
   static async positionLevel() {

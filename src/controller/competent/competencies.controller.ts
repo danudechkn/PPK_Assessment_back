@@ -36,13 +36,13 @@ export class CompetenciesController {
         ? Number(req.query.funcID)
         : Number(userToken?.funcUnitID);
 
-      // ⚠️ ตรวจสอบว่าได้ค่าทั้ง 2 ตัวครบหรือไม่
-      if (!Number.isSafeInteger(offID) || offID <= 0) {
+      // ⚠️ ตรวจสอบว่าได้ค่าทั้ง 2 ตัวครบหรือไม่ (อนุญาตให้ >= 0 โดย 0 คือทั้งหมด / ทุกกลุ่มงาน)
+      if (!Number.isSafeInteger(offID) || offID < 0) {
         return res
           .status(400)
           .json({ success: false, message: "ไม่พบข้อมูลระดับตำแหน่ง (posid)" });
       }
-      if (!Number.isSafeInteger(funcID) || funcID <= 0) {
+      if (!Number.isSafeInteger(funcID) || funcID < 0) {
         return res
           .status(400)
           .json({ success: false, message: "ไม่พบข้อมูลหน่วยงาน (funcid)" });

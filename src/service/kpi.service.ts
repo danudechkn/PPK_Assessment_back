@@ -524,7 +524,7 @@ class KpiService {
     }
   }
 
-  private static parsePagination(query: PaginationQuery = {}, defaultLimit = 10, maxLimit = 50) {
+  private static parsePagination(query: PaginationQuery = {}, defaultLimit = 10, maxLimit = 100) {
     return parsePagination(query, defaultLimit, maxLimit);
   }
 }

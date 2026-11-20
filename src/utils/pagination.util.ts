@@ -30,7 +30,7 @@ export function parsePositiveInteger(value: unknown, fallback: number, field: st
   return Number(value);
 }
 
-export function parsePagination(query: PaginationQuery = {}, defaultLimit = 10, maxLimit = 50) {
+export function parsePagination(query: PaginationQuery = {}, defaultLimit = 10, maxLimit = 100) {
   const page = parsePositiveInteger(query.page, 1, "page");
   const limit = parsePositiveInteger(query.limit, defaultLimit, "limit");
   if (limit > maxLimit) throw new ApiError(`limit must be less than or equal to ${maxLimit}`);
